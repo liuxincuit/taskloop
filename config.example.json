@@ -1,0 +1,20 @@
+{
+  "intervalSeconds": 60,
+  "sessionDir": "./.pi-sessions",
+  "rules": [
+    {
+      "source": "youtrack",
+      "labels": ["ready"],
+      "notLabels": ["explored"],
+      "assignee": "me",
+      "promptTemplate": "templates/yt-explorer.md"
+    },
+    {
+      "source": "wiki",
+      "labels": ["ready"],
+      "notLabels": ["explored"],
+      "assignee": "me",
+      "promptTemplate": "templates/wiki-exploer.md"
+    }
+  ]
+}

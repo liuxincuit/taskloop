@@ -1,0 +1,9 @@
+{
+  "name": "taskloop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "定时从多个任务来源按标签抓取任务，交给 AI Agent 非交互模式自动执行",
+  "scripts": {
+    "test": "node --test"
+  }
+}
