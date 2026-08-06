@@ -297,3 +297,53 @@ test('resolveEnv：urlEnv 环境变量覆盖默认 URL', () => {
   assert.strictEqual(env.urls.youtrack, 'http://custom:9999');
   assert.strictEqual(env.urls.wiki, 'https://wiki.ispeco.com');
 });
+
+test('runCycle：模板渲染规则级占位符 {labels}/{not_labels}', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'main-test-'));
+  const templatePath = path.join(dir, 'rule.md');
+  fs.writeFileSync(templatePath, '任务须满足 {labels}，完成后打上 {not_labels}', 'utf8');
+  const config = {
+    intervalSeconds: 60,
+    sessionDir: dir,
+    rules: [
+      { labels: ['ready', 'explorer'], notLabels: ['explored', 'done'], promptTemplate: templatePath },
+    ],
+  };
+  let prompt = null;
+  const deps = makeDeps({
+    sources: {
+      youtrack: { fetchTasks: async () => [
+        { id: '1', idReadable: 'CS-1', labels: ['ready', 'explorer'] },
+      ] },
+      wiki: { fetchTasks: async () => [] },
+    },
+    runPi: async (p) => { prompt = p; return { exitCode: 0 }; },
+  });
+  await runCycle({ config, deps, round: 1 });
+  assert.strictEqual(prompt, '任务须满足 ready, explorer，完成后打上 explored, done');
+});
+
+test('runCycle：notLabels 未配置时 {not_labels} 替换为空字符串', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'main-test-'));
+  const templatePath = path.join(dir, 'rule.md');
+  fs.writeFileSync(templatePath, '完成后打上 {not_labels}', 'utf8');
+  const config = {
+    intervalSeconds: 60,
+    sessionDir: dir,
+    rules: [
+      { labels: ['ready'], notLabels: [], promptTemplate: templatePath },
+    ],
+  };
+  let prompt = null;
+  const deps = makeDeps({
+    sources: {
+      youtrack: { fetchTasks: async () => [
+        { id: '1', idReadable: 'CS-1', labels: ['ready'] },
+      ] },
+      wiki: { fetchTasks: async () => [] },
+    },
+    runPi: async (p) => { prompt = p; return { exitCode: 0 }; },
+  });
+  await runCycle({ config, deps, round: 1 });
+  assert.strictEqual(prompt, '完成后打上 ');
+});

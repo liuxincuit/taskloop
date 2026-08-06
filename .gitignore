@@ -4,5 +4,10 @@
 # 本地配置（不提交，从 config.example.json 复制）
 config.json
 
-# pi agent 会话数据（运行产物，不提交）
-.pi/
+# pi 本地数据与 SDD 工作目录（不提交）
+/.pi/
+/.superpowers/
+
+# 个人工作流模板（不提交，仅本地使用；analyze.md 为示例模板保留提交）
+templates/*
+!templates/analyze.md

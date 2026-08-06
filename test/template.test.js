@@ -48,3 +48,28 @@ test('wikiUrl 未提供时不替换 {wiki_url}', () => {
 test('youtrackId 未提供时不替换 {youtrack_id}', () => {
   assert.strictEqual(renderTemplate('{youtrack_id}', { wikiUrl: 'http://w' }), '{youtrack_id}');
 });
+
+test('替换 {labels} 为逗号连接后的字符串', () => {
+  assert.strictEqual(
+    renderTemplate('任务须满足标签 {labels}', { labels: 'ready, explorer' }),
+    '任务须满足标签 ready, explorer'
+  );
+});
+
+test('替换 {not_labels} 为逗号连接后的字符串', () => {
+  assert.strictEqual(
+    renderTemplate('完成后打上 {not_labels} 标签', { notLabels: 'explored' }),
+    '完成后打上 explored 标签'
+  );
+});
+
+test('labels 为空字符串时替换为空', () => {
+  assert.strictEqual(renderTemplate('标记 {labels}', { labels: '' }), '标记 ');
+});
+
+test('未提供 labels/notLabels 时保留原样', () => {
+  assert.strictEqual(
+    renderTemplate('打上 {not_labels} 与 {labels}', { youtrackId: 'CS-1' }),
+    '打上 {not_labels} 与 {labels}'
+  );
+});

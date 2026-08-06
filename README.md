@@ -24,6 +24,7 @@
 ### YouTrack 来源
 
 - 查询：`#标签1 #标签2`（多标签是 OR 语义粗查，AND 精确匹配由本地 `filterTasks` 兜底），`assignee` 规则见下文
+- 规则中的标签必须是 YouTrack 中已存在的标签，否则查询报 HTTP 400 语法错误
 - `{youtrack_id}` 替换为任务的 `idReadable`（如 `CS-1`）
 
 ### Wiki 来源
@@ -98,10 +99,12 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 pi 子进程（
 
 ### 模板占位符
 
-模板是 pi 的 prompt 文件，支持两个占位符，缺省不替换（原样保留）：
+模板是 pi 的 prompt 文件，支持四类占位符。任务级占位符缺省不替换（原样保留）；规则级占位符替换值来自规则配置，改 config.json 无需改模板：
 
 - `{youtrack_id}`：YouTrack 任务的 `idReadable`（如 `CS-1`）；wiki 任务下为页面 id
 - `{wiki_url}`：Wiki 页面的完整 URL（仅 wiki 任务有值）
+- `{labels}`：规则配置 `labels` 的逗号连接（如 `ready, explorer`）
+- `{not_labels}`：规则配置 `notLabels` 的逗号连接（未配置时替换为空字符串）
 
 ## 扩展新来源
 

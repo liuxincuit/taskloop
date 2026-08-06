@@ -92,6 +92,8 @@ async function runCycle({ config, deps, round }) {
       const prompt = renderTemplate(template, {
         youtrackId: task.idReadable,
         wikiUrl: task.url,
+        labels: rule.labels.join(', '),
+        notLabels: rule.notLabels.join(', '),
       });
       log(`[${task.idReadable}] 开始执行（模板: ${rule.promptTemplate}）`);
       const { exitCode } = await deps.runPi(prompt, {
