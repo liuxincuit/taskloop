@@ -3,27 +3,49 @@ const assert = require('node:assert');
 const http = require('node:http');
 const { buildQuery, createHttpClient, fetchTasks } = require('../src/youTrack.js');
 
-test('buildQuery：多个 labels 生成 hashtag 查询', () => {
+test('buildQuery：多个 labels 生成 tag AND 查询', () => {
   assert.strictEqual(buildQuery({ labels: ['readyed', 'clearly'] }),
-    '#readyed #clearly');
+    'tag: {readyed} AND tag: {clearly}');
 });
 
 test('buildQuery：assignee 为 me', () => {
   assert.strictEqual(
     buildQuery({ labels: ['readyed'], assignee: 'me' }),
-    '#readyed assignee: me'
+    'tag: {readyed} AND assignee: me'
   );
 });
 
 test('buildQuery：assignee 为 login', () => {
   assert.strictEqual(
     buildQuery({ labels: ['readyed'], assignee: 'liuxin' }),
-    '#readyed assignee: {liuxin}'
+    'tag: {readyed} AND assignee: {liuxin}'
   );
 });
 
 test('buildQuery：无 assignee', () => {
-  assert.strictEqual(buildQuery({ labels: ['readyed'] }), '#readyed');
+  assert.strictEqual(buildQuery({ labels: ['readyed'] }), 'tag: {readyed}');
+});
+
+test('buildQuery：notLabels 生成排除段', () => {
+  assert.strictEqual(
+    buildQuery({ labels: ['a', 'b'], notLabels: ['c'] }),
+    'tag: {a} AND tag: {b} AND tag: -{c}'
+  );
+});
+
+test('buildQuery：多个 notLabels 各生成一个排除段', () => {
+  assert.strictEqual(
+    buildQuery({ labels: ['a'], notLabels: ['c', 'd'] }),
+    'tag: {a} AND tag: -{c} AND tag: -{d}'
+  );
+});
+
+test('buildQuery：空 notLabels 不生成排除段', () => {
+  assert.strictEqual(buildQuery({ labels: ['a'], notLabels: [] }), 'tag: {a}');
+});
+
+test('buildQuery：空 labels 返回空串', () => {
+  assert.strictEqual(buildQuery({ labels: [] }), '');
 });
 
 test('fetchTasks：请求 URL 与返回结构映射', async () => {
@@ -41,7 +63,7 @@ test('fetchTasks：请求 URL 与返回结构映射', async () => {
   );
   assert.strictEqual(calls.length, 1);
   assert.strictEqual(calls[0].pathname, '/api/issues');
-  assert.strictEqual(calls[0].searchParams.get('query'), '#readyed assignee: me');
+  assert.strictEqual(calls[0].searchParams.get('query'), 'tag: {readyed} AND assignee: me');
   assert.strictEqual(calls[0].searchParams.get('fields'), 'id,idReadable,tags(id,name)');
   assert.strictEqual(calls[0].searchParams.get('$top'), '-1');
   assert.deepStrictEqual(result, [

@@ -16,14 +16,14 @@
 
 | 来源 key | 系统 | 抓取方式 | 模板占位符 |
 | --- | --- | --- | --- |
-| `youtrack` | YouTrack | `/api/issues` 按标签（hashtag）与指派查询 | `{youtrack_id}` |
+| `youtrack` | YouTrack | `/api/issues` 按标签与指派查询 | `{youtrack_id}` |
 | `wiki` | Supermap Confluence Wiki | `/rest/api/search` 按创建者（creator）与标签（CQL）查询 | `{wiki_url}` |
 
 来源与任务形状统一为：`{ id, idReadable, title, url, labels }`（`title`、`url` 可为空）。
 
 ### YouTrack 来源
 
-- 查询：`#标签1 #标签2`（多标签是 OR 语义粗查，AND 精确匹配由本地 `filterTasks` 兜底），`assignee` 规则见下文
+- 查询：`tag: {标签1} AND tag: {标签2} AND tag: -{排除标签}`（服务端精确 AND/NOT；`tag: -{x}` 的负号必须在花括号外），本地 `filterTasks` 仍兜底，`assignee` 规则见下文
 - 规则中的标签必须是 YouTrack 中已存在的标签，否则查询报 HTTP 400 语法错误
 - `{youtrack_id}` 替换为任务的 `idReadable`（如 `CS-1`）
 

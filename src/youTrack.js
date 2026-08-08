@@ -2,13 +2,16 @@ const http = require('node:http');
 const https = require('node:https');
 
 function buildQuery(rule) {
-  // YouTrack 标签查询用 hashtag 语法：`tags: {x}` 匹配的是 State 字段而非标签；
-  // 多 hashtag 空格分隔是 OR 语义，AND 精确过滤由 filterTasks 本地兜底。
-  const parts = rule.labels.map((label) => `#${label}`);
+  // 服务端精确查询：`tag: {x}` 是 AND 语义（hashtag 空格分隔是 OR），
+  // `tag: -{x}`（负号在花括号外）排除标签；负号在花括号内（tag: {-x}）会报 HTTP 400。
+  const parts = rule.labels.map((label) => `tag: {${label}}`);
+  for (const label of rule.notLabels || []) {
+    parts.push(`tag: -{${label}}`);
+  }
   if (rule.assignee) {
     parts.push(rule.assignee === 'me' ? 'assignee: me' : `assignee: {${rule.assignee}}`);
   }
-  return parts.join(' ');
+  return parts.join(' AND ');
 }
 
 function createHttpClient(tokenEnvName = 'SUPERMAP_YOUTRACK_TOKEN') {
