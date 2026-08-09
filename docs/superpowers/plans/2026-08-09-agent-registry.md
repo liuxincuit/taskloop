@@ -801,9 +801,14 @@ Expected: 全部 PASS（9 个测试文件）
 
 - [ ] **Step 2: 检查残留引用**
 
-Run: `grep -rn "runPi\|piPath\|sessionDir" src/ | grep -v "agentRunner\|sessionDir = configDir\|agentConfig"`
+Run: `grep -rn "runPi\|piPath\|config\.sessionDir" src/`   # 预期无输出
 
-Expected: 仅剩 `src/agentRunner.js` 的临时文件名前缀 `agent-task-` 无 sessionDir 残留；`src/main.js` 不应再出现 `runPi`/`piPath`/`config.sessionDir`。若有残留，修正。
+Expected: 无输出。若有残留，修正（`config.sessionDir` 字段、`runPi`、`piPath` 均不应再存在）。
+
+再单独确认 config.js 中 sessionDir 引用均为合法解析逻辑：
+
+Run: `grep -n "sessionDir" src/config.js`
+Expected: 仅命中 agentConfig 解析相关行（`sessionDir: agentBlock?.sessionDir ? path.resolve(configDir, agentBlock.sessionDir) : configDir`），不出现 `const sessionDir =` 或 `config.sessionDir`。
 
 - [ ] **Step 3: 手动验证配置校验**
 
