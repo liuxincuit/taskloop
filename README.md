@@ -9,7 +9,7 @@
 1. 按固定间隔（`intervalSeconds`）循环执行每一轮
 2. 每轮遍历 `config.json` 中的每条规则，从规则指定的来源（`source`）按标签抓取候选任务
 3. 本地过滤：任务必须包含全部 `labels`，且不包含任何 `notLabels`
-4. 对每个候选任务渲染 prompt 模板（模板可引用任务占位符），调用 `pi -p` 非交互执行
+4. 对每个候选任务渲染 prompt 模板（模板可引用任务占位符），调用所选 agent（`config.json` 顶层 `agent` 字段，缺省 pi）非交互执行
 5. 同一轮内相同任务只执行一次；抓取失败、模板读取失败均记日志并继续，不中断整轮
 
 ## 支持的来源
@@ -77,8 +77,26 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 pi 子进程（
 | 字段 | 必需 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | `intervalSeconds` | 否 | `60` | 轮询间隔（正整数，秒） |
-| `sessionDir` | 否 | 配置文件所在目录 | pi 会话保存目录（相对配置文件解析） |
+| `agent` | 否 | `pi` | 执行 agent 的注册表 key，目前仅 `pi`；非法值启动报错并列出合法值 |
 | `rules` | 是 | — | 规则数组，非空 |
+
+### agent 专属配置块
+
+顶层 `{agent}` 命名的对象（如 `pi`）存放该 agent 的专属配置，只允许注册表声明的字段，出现未声明字段启动报错：
+
+| 字段 | 必需 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `sessionDir` | 否 | config 文件所在目录 | pi 会话保存目录（相对配置文件解析） |
+| `path` | 否 | `pi` | pi 可执行文件命令名或完整路径 |
+
+```json
+{
+  "agent": "pi",
+  "pi": { "sessionDir": "./.pi-sessions", "path": "pi" }
+}
+```
+
+切换 agent 只需改 `agent` 字段并重写对应配置块（如未来有 claude：`"agent": "claude", "claude": { ... }`）。
 
 ### 规则字段（`rules[]`）
 
@@ -137,6 +155,40 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 pi 子进程（
    ```
 
    注册后自动获得：`config` 的 `source` 校验、`main` 的按来源分发、`resolveEnv` 的按需 token 校验、按来源的 HTTP client（错误消息指向对应 token 环境变量）。
+
+## 扩展新 Agent
+
+与「扩展新来源」同理，新增 agent 只需两步，校验与分发自动生效，无需改动其他代码：
+
+1. **创建 `src/<name>.js`**，导出与现有适配器同签名的纯函数：
+
+   ```js
+   // src/claude.js
+   function buildClaudeArgs(prompt, { tmpFile, cwd, agentConfig }) {
+     return {
+       cmd: agentConfig.path ?? 'claude',
+       args: ['-p', '@' + tmpFile],   // 具体参数以该 CLI 的非交互用法为准
+     };
+   }
+   module.exports = { buildClaudeArgs };
+   ```
+
+   适配器只负责「prompt → spawn 参数」的映射，纯函数、不 spawn、不碰文件系统；临时文件写入、退出码、Ctrl+C 杀进程、win32 引号处理均由通用执行层（`src/agentRunner.js`）统一负责。
+
+2. **在 `src/agents.js` 注册一行**，声明专属配置项：
+
+   ```js
+   const agents = {
+     pi: { buildArgs: buildPiArgs, optionKeys: ['sessionDir', 'path'] },
+     claude: { buildArgs: buildClaudeArgs, optionKeys: ['model', 'permissionMode'] },
+   };
+   ```
+
+   注册后自动获得：`config` 的 `agent` 校验（错误消息列出合法值）、`{agent}` 配置块 key 校验（只允许 `optionKeys` 声明的字段）、`main` 按 agent 分发、通用执行层。config 用法：
+
+   ```json
+   { "agent": "claude", "claude": { "model": "opus", "permissionMode": "acceptEdits" } }
+   ```
 
 ## 测试
 

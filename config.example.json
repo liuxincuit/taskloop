@@ -1,6 +1,9 @@
 {
   "intervalSeconds": 60,
-  "sessionDir": "./.pi-sessions",
+  "agent": "pi",
+  "pi": {
+    "sessionDir": "./.pi-sessions"
+  },
   "rules": [
     {
       "source": "youtrack",
