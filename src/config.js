@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { agents, AGENT_KEYS } = require('./agents.js');
 const { SOURCE_KEYS } = require('./sources.js');
 
 function loadConfig(configPath) {
@@ -20,9 +21,25 @@ function loadConfig(configPath) {
     throw new Error('rules 必须是非空数组');
   }
   const configDir = path.dirname(path.resolve(configPath));
-  const sessionDir = raw.sessionDir
-    ? path.resolve(configDir, raw.sessionDir)
-    : configDir;
+  const agent = raw.agent ?? 'pi';
+  if (typeof agent !== 'string' || !AGENT_KEYS.includes(agent)) {
+    throw new Error(`agent 必须是 ${AGENT_KEYS.map((k) => `"${k}"`).join(' 或 ')}`);
+  }
+  const agentBlock = raw[agent];
+  if (agentBlock !== undefined &&
+      (typeof agentBlock !== 'object' || agentBlock === null || Array.isArray(agentBlock))) {
+    throw new Error(`${agent} 配置块必须是对象`);
+  }
+  const allowedKeys = agents[agent].optionKeys;
+  for (const key of Object.keys(agentBlock ?? {})) {
+    if (!allowedKeys.includes(key)) {
+      throw new Error(`${agent} 配置块不允许字段 "${key}"，允许: ${allowedKeys.join(', ')}`);
+    }
+  }
+  const agentConfig = {
+    sessionDir: agentBlock?.sessionDir ? path.resolve(configDir, agentBlock.sessionDir) : configDir,
+    path: agentBlock?.path ?? 'pi',
+  };
   const rules = raw.rules.map((rule, i) => {
     if (typeof rule !== 'object' || rule === null || Array.isArray(rule)) {
       throw new Error(`rules[${i}] 必须是对象`);
@@ -58,7 +75,7 @@ function loadConfig(configPath) {
       promptTemplate: templatePath,
     };
   });
-  return { intervalSeconds, sessionDir, rules };
+  return { intervalSeconds, agent, agentConfig, rules };
 }
 
 module.exports = { loadConfig };

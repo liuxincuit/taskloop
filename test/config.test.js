@@ -12,7 +12,8 @@ function makeFixture(overrides = {}) {
   fs.writeFileSync(templatePath, '处理 {youtrack_id}', 'utf8');
   const config = {
     intervalSeconds: 60,
-    sessionDir: './.pi-sessions',
+    agent: 'pi',
+    pi: { sessionDir: './.pi-sessions' },
     rules: [
       {
         labels: ['readyed', 'clearly'],
@@ -32,7 +33,9 @@ test('解析合法配置：路径解析与缺省值', () => {
   const { dir, configPath } = makeFixture();
   const result = loadConfig(configPath);
   assert.strictEqual(result.intervalSeconds, 60);
-  assert.strictEqual(result.sessionDir, path.join(dir, '.pi-sessions'));
+  assert.strictEqual(result.agent, 'pi');
+  assert.strictEqual(result.agentConfig.sessionDir, path.join(dir, '.pi-sessions'));
+  assert.strictEqual(result.agentConfig.path, 'pi');
   assert.strictEqual(result.rules.length, 1);
   assert.deepStrictEqual(result.rules[0].labels, ['readyed', 'clearly']);
   assert.deepStrictEqual(result.rules[0].notLabels, ['done']);
@@ -40,15 +43,18 @@ test('解析合法配置：路径解析与缺省值', () => {
   assert.strictEqual(result.rules[0].promptTemplate, path.join(dir, 'templates', 'analyze.md'));
 });
 
-test('缺省值：intervalSeconds 缺省 60，sessionDir 缺省 config 所在目录', () => {
+test('缺省值：intervalSeconds 缺省 60，agent 缺省 pi，sessionDir 缺省 config 所在目录', () => {
   const { dir, configPath } = makeFixture();
   const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   delete raw.intervalSeconds;
-  delete raw.sessionDir;
+  delete raw.agent;
+  delete raw.pi;
   fs.writeFileSync(configPath, JSON.stringify(raw), 'utf8');
   const result = loadConfig(configPath);
   assert.strictEqual(result.intervalSeconds, 60);
-  assert.strictEqual(result.sessionDir, dir);
+  assert.strictEqual(result.agent, 'pi');
+  assert.strictEqual(result.agentConfig.sessionDir, dir);
+  assert.strictEqual(result.agentConfig.path, 'pi');
 });
 
 test('配置文件不是 JSON 对象时报错', () => {
@@ -129,4 +135,36 @@ test('source 为非法值时报错', () => {
     ],
   });
   assert.throws(() => loadConfig(configPath), /source/);
+});
+
+test('agent 为非法值时报错并列出合法值', () => {
+  const { configPath } = makeFixture({ agent: 'opencode' });
+  assert.throws(() => loadConfig(configPath), /agent 必须是 "pi"/);
+});
+
+test('agent 为非字符串时报错', () => {
+  const { configPath } = makeFixture({ agent: 123 });
+  assert.throws(() => loadConfig(configPath), /agent/);
+});
+
+test('agent 配置块为数组时报错', () => {
+  const { configPath } = makeFixture({ pi: [] });
+  assert.throws(() => loadConfig(configPath), /配置块必须是对象/);
+});
+
+test('agent 配置块出现未声明 key 时报错并列出允许值', () => {
+  const { configPath } = makeFixture({ pi: { sessionDir: './.pi-sessions', model: 'x' } });
+  assert.throws(() => loadConfig(configPath), /不允许字段 "model"，允许: sessionDir, path/);
+});
+
+test('agent 配置块缺省时 agentConfig 用默认值', () => {
+  const { dir, configPath } = makeFixture();
+  const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  delete raw.agent;
+  delete raw.pi;
+  fs.writeFileSync(configPath, JSON.stringify(raw), 'utf8');
+  const result = loadConfig(configPath);
+  assert.strictEqual(result.agent, 'pi');
+  assert.strictEqual(result.agentConfig.sessionDir, dir);
+  assert.strictEqual(result.agentConfig.path, 'pi');
 });
