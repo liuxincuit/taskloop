@@ -21,15 +21,15 @@ async function runAgent(prompt, { agent, cwd, agentConfig, spawnFn = spawn, onCh
         stdio: 'inherit',
         ...(isWin ? { shell: true } : {}),
       });
+      child.on('error', reject);
+      child.on('exit', (code) => resolve(code ?? 1));
       try {
         onChild?.(child);
       } catch (err) {
-        child.kill();
+        // 先 reject 再 kill：kill 可能同步触发 exit 事件，先 kill 会让 exit 的 resolve 吞掉 onChild 的错误
         reject(err);
-        return;
+        child.kill();
       }
-      child.on('error', reject);
-      child.on('exit', (code) => resolve(code ?? 1));
     });
     return { exitCode };
   } finally {

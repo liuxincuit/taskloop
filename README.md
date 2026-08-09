@@ -209,7 +209,9 @@ src/
   template.js    # prompt 模板渲染（占位符替换）
   youTrack.js    # YouTrack 抓取 + 通用 httpClient
   wiki.js        # Wiki 抓取（buildCql + fetchWikiTasks）
-  piRunner.js    # pi 非交互执行（临时 prompt 文件 + spawn）
+  agents.js      # Agent 注册表（新增 agent 只改这里）
+  agentRunner.js # 通用执行层（临时文件、spawn、退出码、win32 引号）
+  piRunner.js    # pi 适配器（纯函数，prompt → spawn 参数映射）
 test/            # node:test 测试
 templates/       # prompt 模板示例
 ```

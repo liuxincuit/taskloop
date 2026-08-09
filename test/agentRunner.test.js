@@ -2,7 +2,6 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { EventEmitter } = require('node:events');
 const fs = require('node:fs');
-const path = require('node:path');
 const { runAgent } = require('../src/agentRunner.js');
 
 function makeFakeChild(exitCode) {
@@ -77,6 +76,22 @@ test('runAgent：onChild 回调收到 child 对象', async () => {
     onChild: (child) => { received = child; },
   });
   assert.ok(received);
+});
+
+test('runAgent：onChild 同步抛错时 reject 该错误并调用 kill', async () => {
+  let killed = false;
+  const spawnFn = () => {
+    const child = makeFakeChild(0);
+    const origKill = child.kill;
+    child.kill = () => { killed = true; origKill(); };
+    return child;
+  };
+  await assert.rejects(
+    runAgent('x', { agent: 'pi', cwd: '.', agentConfig, spawnFn,
+      onChild: () => { throw new Error('onChild boom'); } }),
+    /onChild boom/
+  );
+  assert.strictEqual(killed, true);
 });
 
 test('runAgent：spawn error 事件 reject 且清理临时文件', async () => {

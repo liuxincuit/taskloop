@@ -157,6 +157,16 @@ test('agent 配置块出现未声明 key 时报错并列出允许值', () => {
   assert.throws(() => loadConfig(configPath), /不允许字段 "model"，允许: sessionDir, path/);
 });
 
+test('agent 配置块 sessionDir 非字符串时报错', () => {
+  const { configPath } = makeFixture({ pi: { sessionDir: 123 } });
+  assert.throws(() => loadConfig(configPath), /sessionDir 必须是字符串/);
+});
+
+test('agent 配置块 path 非字符串时报错', () => {
+  const { configPath } = makeFixture({ pi: { path: 123 } });
+  assert.throws(() => loadConfig(configPath), /path 必须是字符串/);
+});
+
 test('agent 配置块缺省时 agentConfig 用默认值', () => {
   const { dir, configPath } = makeFixture();
   const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));

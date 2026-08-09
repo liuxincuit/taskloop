@@ -36,6 +36,12 @@ function loadConfig(configPath) {
       throw new Error(`${agent} 配置块不允许字段 "${key}"，允许: ${allowedKeys.join(', ')}`);
     }
   }
+  if (agentBlock?.sessionDir !== undefined && typeof agentBlock.sessionDir !== 'string') {
+    throw new Error(`${agent} 配置块的 sessionDir 必须是字符串`);
+  }
+  if (agentBlock?.path !== undefined && typeof agentBlock.path !== 'string') {
+    throw new Error(`${agent} 配置块的 path 必须是字符串`);
+  }
   const agentConfig = {
     sessionDir: agentBlock?.sessionDir ? path.resolve(configDir, agentBlock.sessionDir) : configDir,
     path: agentBlock?.path ?? 'pi',
