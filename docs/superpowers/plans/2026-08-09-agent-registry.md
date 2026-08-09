@@ -568,7 +568,7 @@ git commit -m "feat: agentRunner 通用执行层（临时文件/spawn/退出码/
 
 2. `makeDeps` 中 `runPi: async () => ({ exitCode: 0 })` 改为 `runAgent: async () => ({ exitCode: 0 })`，删除 `piPath: 'pi'` 行
 
-3. 所有 `runPi:` 键改名为 `runAgent:`。用 grep 定位全部出现位置（实现时执行 `grep -n "runPi" test/main.test.js`，预期 12 处）：行 36（makeDeps 默认值）、49、62、86、100、127、144、162、195、234、320、345。测试名中的 `runPi` 一并改为 `runAgent`（行 92 `无候选任务时不调用 runPi` → `无候选任务时不调用 runAgent`，行 133 `runPi 非零退出码不中断循环` → `runAgent 非零退出码不中断循环`）
+3. 所有 `runPi:` 键改名为 `runAgent:`。用 grep 定位全部出现位置（实现时执行 `grep -n "runPi" test/main.test.js`，预期 14 处 = 12 处 `runPi:` 键 + 2 处测试名）：`runPi:` 键行号为 36（makeDeps 默认值）、49、62、86、100、127、144、162、195、234、320、345；测试名行号为 92、133。测试名中的 `runPi` 一并改为 `runAgent`（行 92 `无候选任务时不调用 runPi` → `无候选任务时不调用 runAgent`，行 133 `runPi 非零退出码不中断循环` → `runAgent 非零退出码不中断循环`）
 
 4. `sessionDir` 字段改造（用 `grep -n "sessionDir" test/main.test.js` 定位，预期 7 处）：行 14 在 `makeFixtureConfig` 内，改为在返回值中加 `agent: 'pi',` 并把 `sessionDir: path.join(dir, '.pi-sessions')` 替换为 `agentConfig: { sessionDir: path.join(dir, '.pi-sessions'), path: 'pi' }`；其余 6 处（行 74、112、177、221、307、332）为内联 config 字面量，`sessionDir: dir` 替换为：
 
@@ -707,13 +707,13 @@ git commit -m "refactor: main 按 agent 注册表分发，sessionDir/piPath 迁�
 
 README「配置详解」的顶层字段表中，`sessionDir` 一行删除，改为：
 
-```markdown
+````markdown
 | `agent` | 否 | `pi` | 执行 agent 的注册表 key，目前仅 `pi`；非法值启动报错并列出合法值 |
-```
+````
 
 并在 rules 表之前新增一节「agent 专属配置块」：
 
-```markdown
+````markdown
 ### agent 专属配置块
 
 顶层 `{agent}` 命名的对象（如 `pi`）存放该 agent 的专属配置，只允许注册表声明的字段，出现未声明字段启动报错：
@@ -731,13 +731,13 @@ README「配置详解」的顶层字段表中，`sessionDir` 一行删除，改�
 ```
 
 切换 agent 只需改 `agent` 字段并重写对应配置块（如未来有 claude：`"agent": "claude", "claude": { ... }`）。
-```
+````
 
 - [ ] **Step 3: README 新增「扩展新 Agent」一节**
 
 在「扩展新来源」一节之后新增：
 
-```markdown
+````markdown
 ## 扩展新 Agent
 
 与「扩展新来源」同理，新增 agent 只需两步，校验与分发自动生效，无需改动其他代码：
@@ -771,7 +771,7 @@ README「配置详解」的顶层字段表中，`sessionDir` 一行删除，改�
    ```json
    { "agent": "claude", "claude": { "model": "opus", "permissionMode": "acceptEdits" } }
    ```
-```
+````
 
 同时把 README 开头「调用 `pi -p` 非交互执行」处改为「调用所选 agent（`config.json` 顶层 `agent` 字段，缺省 pi）非交互执行」。
 
@@ -797,7 +797,7 @@ git commit -m "docs: 配置迁移至 agent 配置块，新增扩展新 Agent 一
 - [ ] **Step 1: 全量测试**
 
 Run: `npm test`
-Expected: 全部 PASS（9 个测试文件）
+Expected: 全部 PASS（11 个测试文件）
 
 - [ ] **Step 2: 检查残留引用**
 
