@@ -107,7 +107,7 @@ runAgent(prompt, { agent, cwd, agentConfig, spawnFn, onChild }) → { exitCode }
 1. prompt 写入 `os.tmpdir()` 临时文件（文件名含唯一标识：pid+时间戳+随机数）
 2. `agents[agent].buildArgs(prompt, { tmpFile, cwd, agentConfig })` 取 `{ cmd, args }`
 3. `spawn(cmd, args, { cwd, stdio: 'inherit', ...(win32 ? { shell: true } : {}) })`
-4. win32 引号处理留在通用层（对非 flag 参数包引号，行为与现状一致）
+4. win32 引号处理留在通用层：对不以 `-` 开头的参数值包引号并 `shell: true`（适配器返回的 args 一律不带引号；`-p`/`--session-dir` 等 flag 不加，`@tmpfile`、路径等值加，行为与现状一致）
 5. `onChild` 回调、`error` 事件 reject、`exit` 事件返回退出码（非零不抛异常）
 6. finally 删除临时文件
 
