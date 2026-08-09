@@ -11,7 +11,8 @@ function makeFixtureConfig() {
   fs.writeFileSync(templatePath, '处理任务 {youtrack_id}', 'utf8');
   return {
     intervalSeconds: 60,
-    sessionDir: path.join(dir, '.pi-sessions'),
+    agent: 'pi',
+    agentConfig: { sessionDir: path.join(dir, '.pi-sessions'), path: 'pi' },
     rules: [
       {
         labels: ['readyed'],
@@ -33,10 +34,9 @@ function makeDeps(overrides = {}) {
     },
     urls: { youtrack: 'http://yt.ispeco.com:8099', wiki: 'https://wiki.ispeco.com' },
     tokens: { youtrack: 't', wiki: 'wt' },
-    runPi: async () => ({ exitCode: 0 }),
+    runAgent: async () => ({ exitCode: 0 }),
     httpClient: null,
     cwd: '.',
-    piPath: 'pi',
     shouldStop: () => false,
     ...overrides,
   };
@@ -46,7 +46,7 @@ test('runCycle：按规则抓取、过滤、执行', async () => {
   const config = makeFixtureConfig();
   const ran = [];
   const deps = makeDeps({
-    runPi: async (prompt, opts) => {
+    runAgent: async (prompt, opts) => {
       ran.push(prompt);
       return { exitCode: 0 };
     },
@@ -59,7 +59,7 @@ test('runCycle：模板替换使用 idReadable', async () => {
   const config = makeFixtureConfig();
   let prompt = null;
   const deps = makeDeps({
-    runPi: async (p) => { prompt = p; return { exitCode: 0 }; },
+    runAgent: async (p) => { prompt = p; return { exitCode: 0 }; },
   });
   await runCycle({ config, deps, round: 1 });
   assert.strictEqual(prompt, '处理任务 CS-1');
@@ -71,7 +71,8 @@ test('runCycle：同轮多个 rule 抓到同一任务只执行一次', async () 
   fs.writeFileSync(templatePath, '处理 {youtrack_id}', 'utf8');
   const config = {
     intervalSeconds: 60,
-    sessionDir: dir,
+    agent: 'pi',
+    agentConfig: { sessionDir: dir, path: 'pi' },
     rules: [
       { labels: ['a'], notLabels: [], promptTemplate: templatePath },
       { labels: ['b'], notLabels: [], promptTemplate: templatePath },
@@ -83,13 +84,13 @@ test('runCycle：同轮多个 rule 抓到同一任务只执行一次', async () 
       youtrack: { fetchTasks: async () => [{ id: '1', idReadable: 'CS-1', labels: ['a', 'b'] }] },
       wiki: { fetchTasks: async () => [] },
     },
-    runPi: async (p) => { ran.push(p); return { exitCode: 0 }; },
+    runAgent: async (p) => { ran.push(p); return { exitCode: 0 }; },
   });
   await runCycle({ config, deps, round: 1 });
   assert.deepStrictEqual(ran, ['处理 CS-1']);
 });
 
-test('runCycle：无候选任务时不调用 runPi', async () => {
+test('runCycle：无候选任务时不调用 runAgent', async () => {
   const config = makeFixtureConfig();
   let calls = 0;
   const deps = makeDeps({
@@ -97,7 +98,7 @@ test('runCycle：无候选任务时不调用 runPi', async () => {
       youtrack: { fetchTasks: async () => [] },
       wiki: { fetchTasks: async () => [] },
     },
-    runPi: async () => { calls++; return { exitCode: 0 }; },
+    runAgent: async () => { calls++; return { exitCode: 0 }; },
   });
   await runCycle({ config, deps, round: 1 });
   assert.strictEqual(calls, 0);
@@ -109,7 +110,8 @@ test('runCycle：抓取失败记日志并继续其他规则', async () => {
   fs.writeFileSync(templatePath, '处理 {youtrack_id}', 'utf8');
   const config = {
     intervalSeconds: 60,
-    sessionDir: dir,
+    agent: 'pi',
+    agentConfig: { sessionDir: dir, path: 'pi' },
     rules: [
       { labels: ['a'], notLabels: [], promptTemplate: templatePath },
       { labels: ['b'], notLabels: [], promptTemplate: templatePath },
@@ -124,13 +126,13 @@ test('runCycle：抓取失败记日志并继续其他规则', async () => {
       } },
       wiki: { fetchTasks: async () => [] },
     },
-    runPi: async (p) => { ran.push(p); return { exitCode: 0 }; },
+    runAgent: async (p) => { ran.push(p); return { exitCode: 0 }; },
   });
   await runCycle({ config, deps, round: 1 });
   assert.deepStrictEqual(ran, ['处理 CS-1']);
 });
 
-test('runCycle：runPi 非零退出码不中断循环', async () => {
+test('runCycle：runAgent 非零退出码不中断循环', async () => {
   const config = makeFixtureConfig();
   const ran = [];
   const deps = makeDeps({
@@ -141,7 +143,7 @@ test('runCycle：runPi 非零退出码不中断循环', async () => {
       ] },
       wiki: { fetchTasks: async () => [] },
     },
-    runPi: async (p) => {
+    runAgent: async (p) => {
       ran.push(p);
       return { exitCode: p.includes('CS-1') ? 1 : 0 };
     },
@@ -159,7 +161,7 @@ test('runCycle：shouldStop 时提前返回', async () => {
       youtrack: { fetchTasks: async () => [{ id: '1', idReadable: 'CS-1', labels: ['readyed'] }] },
       wiki: { fetchTasks: async () => [] },
     },
-    runPi: async () => { calls++; stopped = true; return { exitCode: 0 }; },
+    runAgent: async () => { calls++; stopped = true; return { exitCode: 0 }; },
     shouldStop: () => stopped,
   });
   await runCycle({ config, deps, round: 1 });
@@ -174,7 +176,8 @@ test('runCycle：模板读取失败时跳过该任务继续', async () => {
   fs.writeFileSync(templateB, '处理B {youtrack_id}', 'utf8');
   const config = {
     intervalSeconds: 60,
-    sessionDir: dir,
+    agent: 'pi',
+    agentConfig: { sessionDir: dir, path: 'pi' },
     rules: [
       { labels: ['a'], notLabels: [], promptTemplate: templateA },
       { labels: ['b'], notLabels: [], promptTemplate: templateB },
@@ -192,7 +195,7 @@ test('runCycle：模板读取失败时跳过该任务继续', async () => {
       } },
       wiki: { fetchTasks: async () => [] },
     },
-    runPi: async (p) => { ran.push(p); return { exitCode: 0 }; },
+    runAgent: async (p) => { ran.push(p); return { exitCode: 0 }; },
   });
   await runCycle({ config, deps, round: 1 });
   assert.deepStrictEqual(ran, ['处理B CS-2']);
@@ -218,7 +221,8 @@ test('runCycle：wiki 规则从注册表取 fetch 并渲染 {wiki_url}', async (
   fs.writeFileSync(templatePath, '读取页面 {wiki_url}', 'utf8');
   const config = {
     intervalSeconds: 60,
-    sessionDir: dir,
+    agent: 'pi',
+    agentConfig: { sessionDir: dir, path: 'pi' },
     rules: [
       { source: 'wiki', labels: ['ready'], notLabels: ['explored'], promptTemplate: templatePath },
     ],
@@ -231,7 +235,7 @@ test('runCycle：wiki 规则从注册表取 fetch 并渲染 {wiki_url}', async (
         { id: '111', idReadable: '111', title: '页面A', url: 'https://wiki.ispeco.com/pages/viewpage.action?pageId=111', labels: ['ready'] },
       ] },
     },
-    runPi: async (prompt) => { ran.push(prompt); return { exitCode: 0 }; },
+    runAgent: async (prompt) => { ran.push(prompt); return { exitCode: 0 }; },
   });
   await runCycle({ config, deps, round: 1 });
   assert.deepStrictEqual(ran, ['读取页面 https://wiki.ispeco.com/pages/viewpage.action?pageId=111']);
@@ -304,7 +308,8 @@ test('runCycle：模板渲染规则级占位符 {labels}/{not_labels}', async ()
   fs.writeFileSync(templatePath, '任务须满足 {labels}，完成后打上 {not_labels}', 'utf8');
   const config = {
     intervalSeconds: 60,
-    sessionDir: dir,
+    agent: 'pi',
+    agentConfig: { sessionDir: dir, path: 'pi' },
     rules: [
       { labels: ['ready', 'explorer'], notLabels: ['explored', 'done'], promptTemplate: templatePath },
     ],
@@ -317,7 +322,7 @@ test('runCycle：模板渲染规则级占位符 {labels}/{not_labels}', async ()
       ] },
       wiki: { fetchTasks: async () => [] },
     },
-    runPi: async (p) => { prompt = p; return { exitCode: 0 }; },
+    runAgent: async (p) => { prompt = p; return { exitCode: 0 }; },
   });
   await runCycle({ config, deps, round: 1 });
   assert.strictEqual(prompt, '任务须满足 ready, explorer，完成后打上 explored, done');
@@ -329,7 +334,8 @@ test('runCycle：notLabels 未配置时 {not_labels} 替换为空字符串', asy
   fs.writeFileSync(templatePath, '完成后打上 {not_labels}', 'utf8');
   const config = {
     intervalSeconds: 60,
-    sessionDir: dir,
+    agent: 'pi',
+    agentConfig: { sessionDir: dir, path: 'pi' },
     rules: [
       { labels: ['ready'], notLabels: [], promptTemplate: templatePath },
     ],
@@ -342,8 +348,32 @@ test('runCycle：notLabels 未配置时 {not_labels} 替换为空字符串', asy
       ] },
       wiki: { fetchTasks: async () => [] },
     },
-    runPi: async (p) => { prompt = p; return { exitCode: 0 }; },
+    runAgent: async (p) => { prompt = p; return { exitCode: 0 }; },
   });
   await runCycle({ config, deps, round: 1 });
   assert.strictEqual(prompt, '完成后打上 ');
+});
+
+test('runCycle：config.agent 与 agentConfig 透传给 runAgent', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'main-test-'));
+  const templatePath = path.join(dir, 'analyze.md');
+  fs.writeFileSync(templatePath, '处理 {youtrack_id}', 'utf8');
+  const config = {
+    intervalSeconds: 60,
+    agent: 'pi',
+    agentConfig: { sessionDir: dir, path: '/opt/pi' },
+    rules: [{ labels: ['a'], notLabels: [], promptTemplate: templatePath }],
+  };
+  let opts = null;
+  const deps = makeDeps({
+    sources: {
+      youtrack: { fetchTasks: async () => [{ id: '1', idReadable: 'CS-1', labels: ['a'] }] },
+      wiki: { fetchTasks: async () => [] },
+    },
+    runAgent: async (p, o) => { opts = o; return { exitCode: 0 }; },
+  });
+  await runCycle({ config, deps, round: 1 });
+  assert.strictEqual(opts.agent, 'pi');
+  assert.strictEqual(opts.agentConfig.path, '/opt/pi');
+  assert.strictEqual(opts.agentConfig.sessionDir, dir);
 });

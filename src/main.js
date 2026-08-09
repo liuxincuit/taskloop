@@ -5,7 +5,7 @@ const { filterTasks } = require('./filter.js');
 const { renderTemplate } = require('./template.js');
 const { createHttpClient } = require('./youTrack.js');
 const { sources, SOURCE_KEYS } = require('./sources.js');
-const { runPi } = require('./piRunner.js');
+const { runAgent } = require('./agentRunner.js');
 const { loadConfig } = require('./config.js');
 
 function timestamp() {
@@ -96,10 +96,10 @@ async function runCycle({ config, deps, round }) {
         notLabels: rule.notLabels.join(', '),
       });
       log(`[${task.idReadable}] 开始执行（模板: ${rule.promptTemplate}）`);
-      const { exitCode } = await deps.runPi(prompt, {
+      const { exitCode } = await deps.runAgent(prompt, {
+        agent: config.agent,
         cwd: deps.cwd,
-        piPath: deps.piPath,
-        sessionDir: config.sessionDir,
+        agentConfig: config.agentConfig,
         onChild: deps.onChild,
       });
       log(`[${task.idReadable}] 完成（退出码 ${exitCode}）`);
@@ -134,11 +134,10 @@ async function main(argv = process.argv) {
       SOURCE_KEYS.map((name) => [name, createHttpClient(sources[name].tokenEnv)])
     ),
     sources,
-    runPi,
+    runAgent,
     urls: env.urls,
     tokens: env.tokens,
     cwd: path.resolve(__dirname, '..'),
-    piPath: 'pi',
     onChild: (child) => { currentChild = child; },
     shouldStop: () => !running,
   };
