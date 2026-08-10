@@ -11,3 +11,4 @@ config.json
 # 个人工作流模板（不提交，仅本地使用；analyze.md 为示例模板保留提交）
 templates/*
 !templates/analyze.md
+!templates/example-workflow.md
