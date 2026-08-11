@@ -11,14 +11,14 @@ async function runAgent(prompt, { agent, cwd, agentConfig, spawnFn = spawn, onCh
   );
   try {
     fs.writeFileSync(tmpFile, prompt, 'utf8');
-    const { cmd, args } = agents[agent].buildArgs(prompt, { tmpFile, cwd, agentConfig });
+    const { cmd, args, stdin } = agents[agent].buildArgs(prompt, { tmpFile, cwd, agentConfig });
     // win32 shell:true 下含空格的路径会被拆分，统一对非 flag 参数（不以 - 开头）包引号；
     // 适配器返回的 args 一律不带引号
     const finalArgs = isWin ? args.map((a) => (a.startsWith('-') ? a : `"${a}"`)) : args;
     const exitCode = await new Promise((resolve, reject) => {
       const child = spawnFn(cmd, finalArgs, {
         cwd,
-        stdio: 'inherit',
+        stdio: stdin ? ['pipe', 'inherit', 'inherit'] : 'inherit',
         ...(isWin ? { shell: true } : {}),
       });
       child.on('error', reject);
@@ -29,6 +29,12 @@ async function runAgent(prompt, { agent, cwd, agentConfig, spawnFn = spawn, onCh
         // 先 reject 再 kill：kill 可能同步触发 exit 事件，先 kill 会让 exit 的 resolve 吞掉 onChild 的错误
         reject(err);
         child.kill();
+      }
+      if (stdin) {
+        // EPIPE：子进程提前退出时忽略，避免 unhandled 'error' 崩溃
+        child.stdin.on('error', () => {});
+        child.stdin.write(prompt);
+        child.stdin.end();
       }
     });
     return { exitCode };

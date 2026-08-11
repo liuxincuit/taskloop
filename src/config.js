@@ -44,7 +44,7 @@ function loadConfig(configPath) {
   }
   const agentConfig = {
     sessionDir: agentBlock?.sessionDir ? path.resolve(configDir, agentBlock.sessionDir) : configDir,
-    path: agentBlock?.path ?? 'pi',
+    path: agentBlock?.path ?? agent,
   };
   const rules = raw.rules.map((rule, i) => {
     if (typeof rule !== 'object' || rule === null || Array.isArray(rule)) {

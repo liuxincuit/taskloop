@@ -1,6 +1,6 @@
 # taskloop
 
-定时从多个任务来源按标签抓取任务，交给 AI Agent（pi 等）非交互模式自动执行处理的循环 Worker。
+定时从多个任务来源按标签抓取任务，交给 AI Agent（pi / claude）非交互模式自动执行处理的循环 Worker。
 
 零第三方依赖（仅 Node.js 内置模块），Node.js ≥ 18（需要 `String.prototype.replaceAll`）。
 
@@ -38,7 +38,7 @@
 ### 1. 环境要求
 
 - Node.js ≥ 18
-- `pi` 命令在 PATH 中可用
+- 所用 agent 的命令在 PATH 中可用：`pi`（缺省）或 `claude`
 
 ### 2. 配置环境变量
 
@@ -68,7 +68,7 @@ node src/main.js                 # 使用默认 config.json
 node src/main.js /path/to/my-config.json
 ```
 
-Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 pi 子进程（Windows 下强制结束进程树）。
+Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程（Windows 下强制结束进程树）。
 
 ## 配置详解
 
@@ -77,12 +77,14 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 pi 子进程（
 | 字段 | 必需 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | `intervalSeconds` | 否 | `60` | 轮询间隔（正整数，秒） |
-| `agent` | 否 | `pi` | 执行 agent 的注册表 key，目前仅 `pi`；非法值启动报错并列出合法值 |
+| `agent` | 否 | `pi` | 执行 agent 的注册表 key，目前 `pi` / `claude`；非法值启动报错并列出合法值 |
 | `rules` | 是 | — | 规则数组，非空 |
 
 ### agent 专属配置块
 
-顶层 `{agent}` 命名的对象（如 `pi`）存放该 agent 的专属配置，只允许注册表声明的字段，出现未声明字段启动报错：
+顶层 `{agent}` 命名的对象（如 `pi`、`claude`）存放该 agent 的专属配置，只允许注册表声明的字段，出现未声明字段启动报错：
+
+#### `pi` 块
 
 | 字段 | 必需 | 默认 | 说明 |
 | --- | --- | --- | --- |
@@ -96,7 +98,20 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 pi 子进程（
 }
 ```
 
-切换 agent 只需改 `agent` 字段并重写对应配置块（如未来有 claude：`"agent": "claude", "claude": { ... }`）。
+#### `claude` 块
+
+| 字段 | 必需 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `path` | 否 | `claude` | claude 可执行文件命令名或完整路径 |
+
+```json
+{
+  "agent": "claude",
+  "claude": { "path": "claude" }
+}
+```
+
+切换 agent 只需改 `agent` 字段并重写对应配置块。
 
 ### 规则字段（`rules[]`）
 
@@ -117,7 +132,7 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 pi 子进程（
 
 ### 模板占位符
 
-模板是 pi 的 prompt 文件，支持四类占位符。任务级占位符缺省不替换（原样保留）；规则级占位符替换值来自规则配置，改 config.json 无需改模板：
+模板是所选 agent 的 prompt 文件，支持四类占位符。任务级占位符缺省不替换（原样保留）；规则级占位符替换值来自规则配置，改 config.json 无需改模板：
 
 - `{youtrack_id}`：YouTrack 任务的 `idReadable`（如 `CS-1`）；wiki 任务下为页面 id
 - `{wiki_url}`：Wiki 页面的完整 URL（仅 wiki 任务有值）
@@ -163,31 +178,34 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 pi 子进程（
 1. **创建 `src/<name>.js`**，导出与现有适配器同签名的纯函数：
 
    ```js
-   // src/claude.js
-   function buildClaudeArgs(prompt, { tmpFile, cwd, agentConfig }) {
+   // src/myagent.js
+   function buildMyagentArgs(prompt, { tmpFile, cwd, agentConfig }) {
      return {
-       cmd: agentConfig.path ?? 'claude',
-       args: ['-p', '@' + tmpFile],   // 具体参数以该 CLI 的非交互用法为准
+       cmd: agentConfig.path ?? 'myagent',
+       args: ['-p', prompt],   // 具体参数以该 CLI 的非交互用法为准
      };
    }
-   module.exports = { buildClaudeArgs };
+   module.exports = { buildMyagentArgs };
    ```
 
    适配器只负责「prompt → spawn 参数」的映射，纯函数、不 spawn、不碰文件系统；临时文件写入、退出码、Ctrl+C 杀进程、win32 引号处理均由通用执行层（`src/agentRunner.js`）统一负责。
+
+   返回值为 `{ cmd, args }`；若该 CLI 的 prompt 经 stdin 读取（如 claude），返回 `{ cmd, args, stdin: true }`——通用层会把 prompt 写入子进程 stdin（win32 下比内联 argv 更稳，避免 prompt 被 shell 引号拆坏）。
 
 2. **在 `src/agents.js` 注册一行**，声明专属配置项：
 
    ```js
    const agents = {
      pi: { buildArgs: buildPiArgs, optionKeys: ['sessionDir', 'path'] },
-     claude: { buildArgs: buildClaudeArgs, optionKeys: ['model', 'permissionMode'] },
+     claude: { buildArgs: buildClaudeArgs, optionKeys: ['path'] },
+     myagent: { buildArgs: buildMyagentArgs, optionKeys: ['path'] },
    };
    ```
 
    注册后自动获得：`config` 的 `agent` 校验（错误消息列出合法值）、`{agent}` 配置块 key 校验（只允许 `optionKeys` 声明的字段）、`main` 按 agent 分发、通用执行层。config 用法：
 
    ```json
-   { "agent": "claude", "claude": { "model": "opus", "permissionMode": "acceptEdits" } }
+   { "agent": "myagent", "myagent": { "path": "myagent" } }
    ```
 
 ## 测试
@@ -202,16 +220,17 @@ npm test
 
 ```
 src/
-  main.js        # 主循环、按来源分发、resolveEnv、信号处理
-  sources.js     # 来源注册表（新增来源只改这里）
-  config.js      # 配置加载与校验
-  filter.js      # 本地标签过滤（AND labels / NOT notLabels）
-  template.js    # prompt 模板渲染（占位符替换）
-  youTrack.js    # YouTrack 抓取 + 通用 httpClient
-  wiki.js        # Wiki 抓取（buildCql + fetchWikiTasks）
-  agents.js      # Agent 注册表（新增 agent 只改这里）
-  agentRunner.js # 通用执行层（临时文件、spawn、退出码、win32 引号）
-  piRunner.js    # pi 适配器（纯函数，prompt → spawn 参数映射）
-test/            # node:test 测试
-templates/       # prompt 模板示例
+  main.js         # 主循环、按来源分发、resolveEnv、信号处理
+  sources.js      # 来源注册表（新增来源只改这里）
+  config.js       # 配置加载与校验
+  filter.js       # 本地标签过滤（AND labels / NOT notLabels）
+  template.js     # prompt 模板渲染（占位符替换）
+  youTrack.js     # YouTrack 抓取 + 通用 httpClient
+  wiki.js         # Wiki 抓取（buildCql + fetchWikiTasks）
+  agents.js       # Agent 注册表（新增 agent 只改这里）
+  agentRunner.js  # 通用执行层（临时文件、spawn、退出码、win32 引号）
+  piRunner.js     # pi 适配器（纯函数，prompt → spawn 参数映射）
+  claudeRunner.js # claude 适配器（纯函数，prompt 经 stdin 传入）
+test/             # node:test 测试
+templates/        # prompt 模板示例
 ```

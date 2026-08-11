@@ -116,3 +116,39 @@ test('runAgent：spawn error 事件 reject 且清理临时文件', async () => {
   );
   assert.strictEqual(fs.existsSync(tmpPath), false);
 });
+
+test('runAgent：claude 声明 stdin，prompt 写入子进程 stdin 并 end，stdio 为 pipe', async () => {
+  let spawnArgs = null;
+  const stdin = new EventEmitter();
+  stdin.write = (data) => { stdin.data = data; };
+  stdin.end = () => { stdin.ended = true; };
+  const child = makeFakeChild(0);
+  child.stdin = stdin;
+  const spawnFn = (cmd, args, opts) => {
+    spawnArgs = { cmd, args, opts };
+    return child;
+  };
+  const result = await runAgent('处理 CS-1', {
+    agent: 'claude', cwd: '/work', agentConfig: { path: 'claude' }, spawnFn,
+  });
+  assert.strictEqual(result.exitCode, 0);
+  assert.strictEqual(spawnArgs.cmd, 'claude');
+  assert.deepStrictEqual(spawnArgs.args, ['-p', '--permission-mode', 'bypassPermissions']);
+  assert.deepStrictEqual(spawnArgs.opts.stdio, ['pipe', 'inherit', 'inherit']);
+  assert.strictEqual(stdin.data, '处理 CS-1');
+  assert.strictEqual(stdin.ended, true);
+});
+
+test('runAgent：claude stdin 收到 error（EPIPE）不崩溃', async () => {
+  const stdin = new EventEmitter();
+  stdin.write = () => {};
+  stdin.end = () => {};
+  const child = makeFakeChild(0);
+  child.stdin = stdin;
+  const spawnFn = () => child;
+  const result = await runAgent('x', {
+    agent: 'claude', cwd: '.', agentConfig: { path: 'claude' }, spawnFn,
+  });
+  assert.strictEqual(result.exitCode, 0);
+  stdin.emit('error', new Error('EPIPE')); // 若无 error 监听器，EventEmitter 会同步抛 "Unhandled 'error' event" 使测试失败
+});

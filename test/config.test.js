@@ -178,3 +178,22 @@ test('agent 配置块缺省时 agentConfig 用默认值', () => {
   assert.strictEqual(result.agentConfig.sessionDir, dir);
   assert.strictEqual(result.agentConfig.path, 'pi');
 });
+
+test('claude 配置块缺省时 agentConfig.path 为 claude', () => {
+  const { dir, configPath } = makeFixture({ agent: 'claude' });
+  const result = loadConfig(configPath);
+  assert.strictEqual(result.agent, 'claude');
+  assert.strictEqual(result.agentConfig.path, 'claude');
+  assert.strictEqual(result.agentConfig.sessionDir, dir);
+});
+
+test('claude 配置块 path 自定义', () => {
+  const { configPath } = makeFixture({ agent: 'claude', claude: { path: '/opt/claude/bin/claude' } });
+  const result = loadConfig(configPath);
+  assert.strictEqual(result.agentConfig.path, '/opt/claude/bin/claude');
+});
+
+test('claude 配置块出现未声明 key 时报错并列出允许值', () => {
+  const { configPath } = makeFixture({ agent: 'claude', claude: { model: 'x' } });
+  assert.throws(() => loadConfig(configPath), /不允许字段 "model"，允许: path/);
+});
