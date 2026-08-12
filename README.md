@@ -139,6 +139,17 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程
 - `{labels}`：规则配置 `labels` 的逗号连接（如 `ready, explorer`）
 - `{not_labels}`：规则配置 `notLabels` 的逗号连接（未配置时替换为空字符串）
 
+### 模板片段复用（include）
+
+模板支持 `{{include:相对路径}}` 指令在渲染时引入其他文件的内容，公共内容（如产品路径表、统一回复格式）只需维护一份，避免各模板复制粘贴后不同步：
+
+- 路径相对**当前文件所在目录**解析（主模板相对模板目录；片段内再 include 相对片段所在目录），支持嵌套
+- 展开发生在占位符替换之前，片段内可以正常使用上述占位符
+- 循环引用、片段文件不存在会在渲染时报错，该任务被跳过并记日志
+- 用法示例见 `templates/example-workflow.md`；片段文件建议放在 `templates/parts/` 下
+
+> 注意：`templates/*` 已被 .gitignore 忽略，新增片段目录/文件需在 .gitignore 中取消忽略（如 `!templates/parts/`）。
+
 ## 扩展新来源
 
 新增来源（如 Jira、GitHub）只需两步，分发与校验自动生效，无需改动其他代码：
@@ -233,4 +244,5 @@ src/
   claudeRunner.js # claude 适配器（纯函数，prompt 经 stdin 传入）
 test/             # node:test 测试
 templates/        # prompt 模板示例
+templates/parts/ # 模板公共片段（include 复用）
 ```

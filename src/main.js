@@ -1,8 +1,7 @@
-const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { filterTasks } = require('./filter.js');
-const { renderTemplate } = require('./template.js');
+const { renderTemplateFile } = require('./template.js');
 const { createHttpClient } = require('./youTrack.js');
 const { sources, SOURCE_KEYS } = require('./sources.js');
 const { runAgent } = require('./agentRunner.js');
@@ -82,19 +81,18 @@ async function runCycle({ config, deps, round }) {
       if (deps.shouldStop?.()) return;
       if (processed.has(task.idReadable)) continue;
       processed.add(task.idReadable);
-      let template;
+      let prompt;
       try {
-        template = fs.readFileSync(rule.promptTemplate, 'utf8');
+        prompt = renderTemplateFile(rule.promptTemplate, {
+          youtrackId: task.idReadable,
+          wikiUrl: task.url,
+          labels: rule.labels.join(', '),
+          notLabels: rule.notLabels.join(', '),
+        });
       } catch (err) {
-        log(`[${task.idReadable}] 模板读取失败: ${err.message}`);
+        log(`[${task.idReadable}] 模板渲染失败: ${err.message}`);
         continue;
       }
-      const prompt = renderTemplate(template, {
-        youtrackId: task.idReadable,
-        wikiUrl: task.url,
-        labels: rule.labels.join(', '),
-        notLabels: rule.notLabels.join(', '),
-      });
       log(`[${task.idReadable}] 开始执行（模板: ${rule.promptTemplate}）`);
       const { exitCode } = await deps.runAgent(prompt, {
         agent: config.agent,

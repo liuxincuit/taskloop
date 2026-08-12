@@ -1,6 +1,9 @@
-const { test } = require('node:test');
+const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const { renderTemplate } = require('../src/template.js');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { renderTemplate, expandIncludes, renderTemplateFile } = require('../src/template.js');
 
 test('替换 {youtrack_id} 为 idReadable', () => {
   assert.strictEqual(
@@ -71,5 +74,108 @@ test('未提供 labels/notLabels 时保留原样', () => {
   assert.strictEqual(
     renderTemplate('打上 {not_labels} 与 {labels}', { youtrackId: 'CS-1' }),
     '打上 {not_labels} 与 {labels}'
+  );
+});
+
+let tmpDir;
+before(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'template-test-'));
+});
+after(() => {
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('expandIncludes：无 include 指令时原样返回', () => {
+  const content = '没有 include 的文本';
+  assert.strictEqual(expandIncludes(content, tmpDir), content);
+});
+
+test('expandIncludes：基础替换为片段文件内容', () => {
+  fs.writeFileSync(path.join(tmpDir, 'part.md'), '片段内容', 'utf8');
+  assert.strictEqual(
+    expandIncludes('行1 {{include:part.md}} 行2', tmpDir),
+    '行1 片段内容 行2'
+  );
+});
+
+test('expandIncludes：相对 baseDir 解析子目录片段', () => {
+  fs.mkdirSync(path.join(tmpDir, 'sub'), { recursive: true });
+  fs.writeFileSync(path.join(tmpDir, 'sub', 'part.md'), '子目录片段', 'utf8');
+  assert.strictEqual(
+    expandIncludes('{{include:sub/part.md}}', tmpDir),
+    '子目录片段'
+  );
+});
+
+test('expandIncludes：嵌套 include 相对片段自身目录解析', () => {
+  fs.mkdirSync(path.join(tmpDir, 'nested', 'deep'), { recursive: true });
+  fs.writeFileSync(path.join(tmpDir, 'nested', 'deep', 'leaf.md'), '叶子', 'utf8');
+  fs.writeFileSync(path.join(tmpDir, 'nested', 'b.md'), '[[{{include:deep/leaf.md}}]]', 'utf8');
+  assert.strictEqual(
+    expandIncludes('{{include:nested/b.md}}', tmpDir),
+    '[[叶子]]'
+  );
+});
+
+test('expandIncludes：循环引用报错', () => {
+  fs.writeFileSync(path.join(tmpDir, 'cycle-a.md'), '{{include:cycle-b.md}}', 'utf8');
+  fs.writeFileSync(path.join(tmpDir, 'cycle-b.md'), '{{include:cycle-a.md}}', 'utf8');
+  assert.throws(
+    () => expandIncludes('{{include:cycle-a.md}}', tmpDir),
+    /include 循环引用/
+  );
+});
+
+test('expandIncludes：片段文件不存在报错', () => {
+  assert.throws(
+    () => expandIncludes('{{include:not-exist.md}}', tmpDir),
+    /include 片段读取失败/
+  );
+});
+
+test('expandIncludes：绝对路径报错', () => {
+  assert.throws(
+    () => expandIncludes('{{include:D:\\x.md}}', tmpDir),
+    /include 只支持相对路径/
+  );
+});
+
+test('expandIncludes：空白路径报错', () => {
+  assert.throws(
+    () => expandIncludes('{{include:   }}', tmpDir),
+    /include 路径不能为空/
+  );
+});
+
+test('expandIncludes：同一片段可被多次 include（非循环）', () => {
+  assert.strictEqual(
+    expandIncludes('{{include:part.md}}+{{include:part.md}}', tmpDir),
+    '片段内容+片段内容'
+  );
+});
+
+test('expandIncludes：展开后片段内占位符可被 renderTemplate 替换', () => {
+  fs.writeFileSync(path.join(tmpDir, 'placeholder-part.md'), '打上 {not_labels} 标签', 'utf8');
+  const expanded = expandIncludes('{{include:placeholder-part.md}}', tmpDir);
+  assert.strictEqual(
+    renderTemplate(expanded, { notLabels: 'explored' }),
+    '打上 explored 标签'
+  );
+});
+
+test('renderTemplateFile：读文件 + include + 占位符全链路', () => {
+  const tmpl = path.join(tmpDir, 'full.md');
+  fs.writeFileSync(path.join(tmpDir, 'output-part.md'), '输出到评论区打上 {not_labels}', 'utf8');
+  fs.writeFileSync(tmpl, '任务 {youtrack_id}\n{{include:output-part.md}}', 'utf8');
+  assert.strictEqual(
+    renderTemplateFile(tmpl, { youtrackId: 'CS-1', notLabels: 'explored' }),
+    '任务 CS-1\n输出到评论区打上 explored'
+  );
+});
+
+test('renderTemplateFile：模板文件缺失报错', () => {
+  assert.throws(
+    () => renderTemplateFile(path.join(tmpDir, 'no-such.md'), {}),
+    /模板读取失败/
   );
 });
