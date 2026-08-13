@@ -129,11 +129,11 @@ test('runAgent：claude 声明 stdin，prompt 写入子进程 stdin 并 end，st
     return child;
   };
   const result = await runAgent('处理 CS-1', {
-    agent: 'claude', cwd: '/work', agentConfig: { path: 'claude' }, spawnFn,
+    agent: 'claude', cwd: '/work', agentConfig: { path: 'claude' }, spawnFn, isWin: true,
   });
   assert.strictEqual(result.exitCode, 0);
   assert.strictEqual(spawnArgs.cmd, 'claude');
-  assert.deepStrictEqual(spawnArgs.args, ['-p', '--permission-mode', 'bypassPermissions']);
+  assert.deepStrictEqual(spawnArgs.args, ['-p', '--permission-mode', '"bypassPermissions"']);
   assert.deepStrictEqual(spawnArgs.opts.stdio, ['pipe', 'inherit', 'inherit']);
   assert.strictEqual(stdin.data, '处理 CS-1');
   assert.strictEqual(stdin.ended, true);

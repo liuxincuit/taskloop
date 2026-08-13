@@ -67,6 +67,7 @@ async function fetchTasks(rule, { httpClient = createHttpClient(), url, token })
   return (data || []).map((issue) => ({
     id: issue.id,
     idReadable: issue.idReadable,
+    url: `${apiUrl.origin}/issue/${issue.idReadable}`,
     labels: (issue.tags || []).map((tag) => tag.name),
   }));
 }

@@ -16,8 +16,9 @@
 
 | 来源 key | 系统 | 抓取方式 | 模板占位符 |
 | --- | --- | --- | --- |
-| `youtrack` | YouTrack | `/api/issues` 按标签与指派查询 | `{youtrack_id}` |
-| `wiki` | Supermap Confluence Wiki | `/rest/api/search` 按创建者（creator）与标签（CQL）查询 | `{wiki_url}` |
+| `youtrack` | YouTrack | `/api/issues` 按标签与指派查询 | `{youtrack_id}`、`{youtrack_url}` |
+| `wiki` | Supermap Confluence Wiki | `/rest/api/search` 按创建者（creator）与标签（CQL）查询 | `{wiki_id}`、`{wiki_url}` |
+| `jira` | Supermap Jira | `/rest/api/2/search` 按标签（JQL `labels IN`）与指派查询 | `{jira_id}`、`{jira_url}` |
 
 来源与任务形状统一为：`{ id, idReadable, title, url, labels }`（`title`、`url` 可为空）。
 
@@ -33,6 +34,11 @@
 - 标签通过 `expand=content.metadata.labels` 随搜索结果带出；若实例不支持 expand，自动回退为逐页获取
 - `{wiki_url}` 替换为页面地址（`https://<host>/pages/viewpage.action?pageId=<id>`）
 
+### Jira 来源
+
+- 查询：JQL `labels IN (...) [AND labels NOT IN (...)] [AND assignee = currentUser() | assignee = "用户名"]`，最多 100 条
+- `{jira_id}` 替换为 issue key（如 `ISVJ-12228`）；`{jira_url}` 为 browse 链接（`https://<host>/browse/<key>`）
+
 ## 快速开始
 
 ### 1. 环境要求
@@ -46,8 +52,10 @@
 | --- | --- | --- |
 | `SUPERMAP_YOUTRACK_TOKEN` | 使用 `youtrack` 规则时必需 | YouTrack API token |
 | `SUPERMAP_WIKI_TOKEN` | 使用 `wiki` 规则时必需 | Confluence API token |
+| `SUPERMAP_JIRA_TOKEN` | 使用 `jira` 规则时必需 | Jira API token |
 | `YOUTRACK_URL` | 可选 | 覆盖默认地址 `http://yt.ispeco.com:8099` |
 | `WIKI_URL` | 可选 | 覆盖默认地址 `https://wiki.ispeco.com` |
+| `JIRA_URL` | 可选 | 覆盖默认地址 `https://jira.supermap.work` |
 
 只对配置中实际使用到的来源要求 token：只配 wiki 规则时无需设置 `SUPERMAP_YOUTRACK_TOKEN`，反之亦然。token 缺失时启动即报错退出（`环境错误: 未设置 ...`）。
 
@@ -117,7 +125,7 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程
 
 | 字段 | 必需 | 说明 |
 | --- | --- | --- |
-| `source` | 否 | 来源 key，缺省 `youtrack`；非法值报错（`rules[i].source 必须是 "youtrack" 或 "wiki"`） |
+| `source` | 否 | 来源 key，缺省 `youtrack`；非法值报错（`rules[i].source 必须是 "youtrack" 或 "wiki" 或 "jira"`） |
 | `labels` | 是 | 非空字符串数组；任务必须**全部**包含这些标签（AND） |
 | `notLabels` | 否 | 字符串数组；任务包含任一标签即被排除 |
 | `assignee` | 否 | 来源语义不同，见下 |
@@ -129,15 +137,22 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程
 | --- | --- | --- |
 | `youtrack` | `assignee: me`（token 对应用户） | `assignee: {用户名}` |
 | `wiki` | `creator = currentUser()`（token 对应账号） | `creator = "用户名"` |
+| `jira` | `assignee = currentUser()`（token 对应账号） | `assignee = "用户名"` |
 
 ### 模板占位符
 
-模板是所选 agent 的 prompt 文件，支持四类占位符。任务级占位符缺省不替换（原样保留）；规则级占位符替换值来自规则配置，改 config.json 无需改模板：
+模板是所选 agent 的 prompt 文件，支持两类占位符。任务级占位符按来源由注册表声明（下表），缺省不替换（原样保留）；规则级占位符替换值来自规则配置，改 config.json 无需改模板：
 
-- `{youtrack_id}`：YouTrack 任务的 `idReadable`（如 `CS-1`）；wiki 任务下为页面 id
-- `{wiki_url}`：Wiki 页面的完整 URL（仅 wiki 任务有值）
-- `{labels}`：规则配置 `labels` 的逗号连接（如 `ready, explorer`）
-- `{not_labels}`：规则配置 `notLabels` 的逗号连接（未配置时替换为空字符串）
+任务级（按来源）：
+
+- youtrack：`{youtrack_id}`（如 `CS-1`）、`{youtrack_url}`
+- wiki：`{wiki_id}`（页面 id）、`{wiki_url}`（页面完整 URL）
+- jira：`{jira_id}`（issue key，如 `ISVJ-12228`）、`{jira_url}`（browse 链接）
+
+规则级（所有来源）：
+
+- `{labels}`：规则 `labels` 的逗号连接
+- `{not_labels}`：规则 `notLabels` 的逗号连接（未配置时替换为空字符串）
 
 ### 模板片段复用（include）
 
@@ -170,17 +185,44 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程
 
    `httpClient` 通过依赖注入传入（未传时用默认 client），便于单测 mock；401/400 错误消息会指向你传入的 token 环境变量名。
 
-2. **在 `src/sources.js` 注册一行**：
+2. **在 `src/sources.js` 注册一行**（注册项含 `placeholders`，声明该来源的任务级占位符）：
 
    ```js
    const sources = {
-     youtrack: { fetchTasks, tokenEnv: 'SUPERMAP_YOUTRACK_TOKEN', urlEnv: 'YOUTRACK_URL', defaultUrl: 'http://yt.ispeco.com:8099' },
-     wiki: { fetchTasks: fetchWikiTasks, tokenEnv: 'SUPERMAP_WIKI_TOKEN', urlEnv: 'WIKI_URL', defaultUrl: 'https://wiki.ispeco.com' },
-     jira: { fetchTasks: jiraFetchTasks, tokenEnv: 'SUPERMAP_JIRA_TOKEN', urlEnv: 'JIRA_URL', defaultUrl: 'https://jira.example.com' },
+     youtrack: {
+       fetchTasks,
+       tokenEnv: 'SUPERMAP_YOUTRACK_TOKEN',
+       urlEnv: 'YOUTRACK_URL',
+       defaultUrl: 'http://yt.ispeco.com:8099',
+       placeholders: {
+         youtrack_id: (task) => task.idReadable,
+         youtrack_url: (task) => task.url,
+       },
+     },
+     wiki: {
+       fetchTasks: fetchWikiTasks,
+       tokenEnv: 'SUPERMAP_WIKI_TOKEN',
+       urlEnv: 'WIKI_URL',
+       defaultUrl: 'https://wiki.ispeco.com',
+       placeholders: {
+         wiki_id: (task) => task.idReadable,
+         wiki_url: (task) => task.url,
+       },
+     },
+     jira: {
+       fetchTasks: jiraFetchTasks,
+       tokenEnv: 'SUPERMAP_JIRA_TOKEN',
+       urlEnv: 'JIRA_URL',
+       defaultUrl: 'https://jira.supermap.work',
+       placeholders: {
+         jira_id: (task) => task.idReadable,
+         jira_url: (task) => task.url,
+       },
+     },
    };
    ```
 
-   注册后自动获得：`config` 的 `source` 校验、`main` 的按来源分发、`resolveEnv` 的按需 token 校验、按来源的 HTTP client（错误消息指向对应 token 环境变量）。
+   注册后自动获得：`config` 的 `source` 校验、`main` 的按来源分发、`resolveEnv` 的按需 token 校验、按来源的 HTTP client（错误消息指向对应 token 环境变量）、任务级占位符（`placeholders` 字段，模板渲染时按来源替换）。
 
 ## 扩展新 Agent
 
@@ -238,6 +280,7 @@ src/
   template.js     # prompt 模板渲染（占位符替换）
   youTrack.js     # YouTrack 抓取 + 通用 httpClient
   wiki.js         # Wiki 抓取（buildCql + fetchWikiTasks）
+  jira.js         # Jira 抓取（buildJql + fetchTasks）
   agents.js       # Agent 注册表（新增 agent 只改这里）
   agentRunner.js  # 通用执行层（临时文件、spawn、退出码、win32 引号）
   piRunner.js     # pi 适配器（纯函数，prompt → spawn 参数映射）

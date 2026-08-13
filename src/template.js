@@ -45,19 +45,12 @@ function renderTemplateFile(templatePath, placeholders) {
   return renderTemplate(expanded, placeholders);
 }
 
-function renderTemplate(content, { youtrackId, wikiUrl, labels, notLabels } = {}) {
+function renderTemplate(content, values = {}) {
   let result = content;
-  if (youtrackId !== undefined && youtrackId !== null) {
-    result = result.replaceAll('{youtrack_id}', youtrackId);
-  }
-  if (wikiUrl !== undefined && wikiUrl !== null) {
-    result = result.replaceAll('{wiki_url}', wikiUrl);
-  }
-  if (labels !== undefined && labels !== null) {
-    result = result.replaceAll('{labels}', labels);
-  }
-  if (notLabels !== undefined && notLabels !== null) {
-    result = result.replaceAll('{not_labels}', notLabels);
+  for (const [name, value] of Object.entries(values)) {
+    if (value !== undefined && value !== null) {
+      result = result.replaceAll(`{${name}}`, value);
+    }
   }
   return result;
 }

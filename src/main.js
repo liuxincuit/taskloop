@@ -3,7 +3,7 @@ const { spawnSync } = require('node:child_process');
 const { filterTasks } = require('./filter.js');
 const { renderTemplateFile } = require('./template.js');
 const { createHttpClient } = require('./youTrack.js');
-const { sources, SOURCE_KEYS } = require('./sources.js');
+const { sources, SOURCE_KEYS, buildPlaceholders } = require('./sources.js');
 const { runAgent } = require('./agentRunner.js');
 const { loadConfig } = require('./config.js');
 
@@ -83,12 +83,7 @@ async function runCycle({ config, deps, round }) {
       processed.add(task.idReadable);
       let prompt;
       try {
-        prompt = renderTemplateFile(rule.promptTemplate, {
-          youtrackId: task.idReadable,
-          wikiUrl: task.url,
-          labels: rule.labels.join(', '),
-          notLabels: rule.notLabels.join(', '),
-        });
+        prompt = renderTemplateFile(rule.promptTemplate, buildPlaceholders(sourceName, task, rule));
       } catch (err) {
         log(`[${task.idReadable}] 模板渲染失败: ${err.message}`);
         continue;

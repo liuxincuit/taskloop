@@ -67,8 +67,8 @@ test('fetchTasks：请求 URL 与返回结构映射', async () => {
   assert.strictEqual(calls[0].searchParams.get('fields'), 'id,idReadable,tags(id,name)');
   assert.strictEqual(calls[0].searchParams.get('$top'), '-1');
   assert.deepStrictEqual(result, [
-    { id: '1-1', idReadable: 'CS-5599', labels: ['readyed', 'clearly'] },
-    { id: '1-2', idReadable: 'CS-5601', labels: [] },
+    { id: '1-1', idReadable: 'CS-5599', url: 'http://yt.ispeco.com:8099/issue/CS-5599', labels: ['readyed', 'clearly'] },
+    { id: '1-2', idReadable: 'CS-5601', url: 'http://yt.ispeco.com:8099/issue/CS-5601', labels: [] },
   ]);
 });
 
@@ -78,7 +78,7 @@ test('fetchTasks：无 tags 时 labels 为空数组', async () => {
     { labels: ['a'] },
     { httpClient, url: 'http://yt.ispeco.com:8099', token: 't' }
   );
-  assert.deepStrictEqual(result, [{ id: '1', idReadable: 'CS-1', labels: [] }]);
+  assert.deepStrictEqual(result, [{ id: '1', idReadable: 'CS-1', url: 'http://yt.ispeco.com:8099/issue/CS-1', labels: [] }]);
 });
 
 test('fetchTasks：httpClient 抛 401 认证错误', async () => {

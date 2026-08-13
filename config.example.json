@@ -18,6 +18,13 @@
       "notLabels": ["explored"],
       "assignee": "me",
       "promptTemplate": "templates/wiki-exploer.md"
+    },
+    {
+      "source": "jira",
+      "labels": ["taskloop"],
+      "notLabels": ["explored"],
+      "assignee": "me",
+      "promptTemplate": "templates/analyze.md"
     }
   ]
 }

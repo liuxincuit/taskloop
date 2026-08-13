@@ -131,7 +131,7 @@ test('source 为合法值 wiki', () => {
 test('source 为非法值时报错', () => {
   const { configPath } = makeFixture({
     rules: [
-      { source: 'jira', labels: ['a'], promptTemplate: 'templates/analyze.md' },
+      { source: 'github', labels: ['a'], promptTemplate: 'templates/analyze.md' },
     ],
   });
   assert.throws(() => loadConfig(configPath), /source/);

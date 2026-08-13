@@ -7,49 +7,71 @@ const { renderTemplate, expandIncludes, renderTemplateFile } = require('../src/t
 
 test('替换 {youtrack_id} 为 idReadable', () => {
   assert.strictEqual(
-    renderTemplate('请处理任务 {youtrack_id}', { youtrackId: 'CS-1234' }),
+    renderTemplate('请处理任务 {youtrack_id}', { youtrack_id: 'CS-1234' }),
     '请处理任务 CS-1234'
+  );
+});
+
+test('替换 {youtrack_url}', () => {
+  assert.strictEqual(
+    renderTemplate('任务链接 {youtrack_url}', { youtrack_url: 'http://yt/issue/CS-1' }),
+    '任务链接 http://yt/issue/CS-1'
+  );
+});
+
+test('替换 {wiki_id}', () => {
+  assert.strictEqual(
+    renderTemplate('页面 id {wiki_id}', { wiki_id: '123' }),
+    '页面 id 123'
   );
 });
 
 test('多处占位符全部替换', () => {
   assert.strictEqual(
-    renderTemplate('{youtrack_id} 和 {youtrack_id}', { youtrackId: 'CS-1' }),
+    renderTemplate('{youtrack_id} 和 {youtrack_id}', { youtrack_id: 'CS-1' }),
     'CS-1 和 CS-1'
   );
 });
 
 test('无占位符时原样返回', () => {
   const content = '没有占位符的文本';
-  assert.strictEqual(renderTemplate(content, { youtrackId: 'CS-1' }), content);
+  assert.strictEqual(renderTemplate(content, { youtrack_id: 'CS-1' }), content);
 });
 
 test('入参内容不被修改', () => {
   const content = '任务 {youtrack_id}';
-  renderTemplate(content, { youtrackId: 'CS-1' });
+  renderTemplate(content, { youtrack_id: 'CS-1' });
   assert.strictEqual(content, '任务 {youtrack_id}');
 });
 
 test('替换 {wiki_url} 为页面 URL', () => {
   assert.strictEqual(
-    renderTemplate('读取页面 {wiki_url}', { wikiUrl: 'https://wiki.ispeco.com/pages/viewpage.action?pageId=111' }),
+    renderTemplate('读取页面 {wiki_url}', { wiki_url: 'https://wiki.ispeco.com/pages/viewpage.action?pageId=111' }),
     '读取页面 https://wiki.ispeco.com/pages/viewpage.action?pageId=111'
   );
 });
 
-test('两种占位符同时替换', () => {
+test('多种占位符同时替换', () => {
   assert.strictEqual(
-    renderTemplate('任务 {youtrack_id} 页面 {wiki_url}', { youtrackId: 'CS-1', wikiUrl: 'http://w' }),
+    renderTemplate('任务 {youtrack_id} 页面 {wiki_url}', { youtrack_id: 'CS-1', wiki_url: 'http://w' }),
     '任务 CS-1 页面 http://w'
   );
 });
 
 test('wikiUrl 未提供时不替换 {wiki_url}', () => {
-  assert.strictEqual(renderTemplate('{wiki_url}', { youtrackId: 'CS-1' }), '{wiki_url}');
+  assert.strictEqual(renderTemplate('{wiki_url}', { youtrack_id: 'CS-1' }), '{wiki_url}');
 });
 
 test('youtrackId 未提供时不替换 {youtrack_id}', () => {
-  assert.strictEqual(renderTemplate('{youtrack_id}', { wikiUrl: 'http://w' }), '{youtrack_id}');
+  assert.strictEqual(renderTemplate('{youtrack_id}', { wiki_url: 'http://w' }), '{youtrack_id}');
+});
+
+test('未提供的占位符原样保留（通用机制）', () => {
+  assert.strictEqual(renderTemplate('{jira_id}', {}), '{jira_id}');
+});
+
+test('通用占位符替换', () => {
+  assert.strictEqual(renderTemplate('{a} 和 {b}', { a: '1', b: '2' }), '1 和 2');
 });
 
 test('替换 {labels} 为逗号连接后的字符串', () => {
@@ -59,22 +81,23 @@ test('替换 {labels} 为逗号连接后的字符串', () => {
   );
 });
 
-test('替换 {not_labels} 为逗号连接后的字符串', () => {
+test('替换 {not_labels}', () => {
   assert.strictEqual(
-    renderTemplate('完成后打上 {not_labels} 标签', { notLabels: 'explored' }),
+    renderTemplate('完成后打上 {not_labels} 标签', { not_labels: 'explored' }),
     '完成后打上 explored 标签'
   );
+});
+
+test('显式传 null 时不替换', () => {
+  assert.strictEqual(renderTemplate('{a}', { a: null }), '{a}');
 });
 
 test('labels 为空字符串时替换为空', () => {
   assert.strictEqual(renderTemplate('标记 {labels}', { labels: '' }), '标记 ');
 });
 
-test('未提供 labels/notLabels 时保留原样', () => {
-  assert.strictEqual(
-    renderTemplate('打上 {not_labels} 与 {labels}', { youtrackId: 'CS-1' }),
-    '打上 {not_labels} 与 {labels}'
-  );
+test('未提供时 {not_labels} 与 {labels} 原样保留', () => {
+  assert.strictEqual(renderTemplate('打上 {not_labels} 与 {labels}', { youtrack_id: 'CS-1' }), '打上 {not_labels} 与 {labels}');
 });
 
 let tmpDir;
@@ -158,7 +181,7 @@ test('expandIncludes：展开后片段内占位符可被 renderTemplate 替换',
   fs.writeFileSync(path.join(tmpDir, 'placeholder-part.md'), '打上 {not_labels} 标签', 'utf8');
   const expanded = expandIncludes('{{include:placeholder-part.md}}', tmpDir);
   assert.strictEqual(
-    renderTemplate(expanded, { notLabels: 'explored' }),
+    renderTemplate(expanded, { not_labels: 'explored' }),
     '打上 explored 标签'
   );
 });
@@ -168,7 +191,7 @@ test('renderTemplateFile：读文件 + include + 占位符全链路', () => {
   fs.writeFileSync(path.join(tmpDir, 'output-part.md'), '输出到评论区打上 {not_labels}', 'utf8');
   fs.writeFileSync(tmpl, '任务 {youtrack_id}\n{{include:output-part.md}}', 'utf8');
   assert.strictEqual(
-    renderTemplateFile(tmpl, { youtrackId: 'CS-1', notLabels: 'explored' }),
+    renderTemplateFile(tmpl, { youtrack_id: 'CS-1', not_labels: 'explored' }),
     '任务 CS-1\n输出到评论区打上 explored'
   );
 });
