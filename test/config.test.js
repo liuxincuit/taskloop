@@ -43,8 +43,8 @@ test('解析合法配置：路径解析与缺省值', () => {
   assert.strictEqual(result.rules[0].promptTemplate, path.join(dir, 'templates', 'analyze.md'));
 });
 
-test('缺省值：intervalSeconds 缺省 60，agent 缺省 pi，sessionDir 缺省 config 所在目录', () => {
-  const { dir, configPath } = makeFixture();
+test('缺省值：intervalSeconds 缺省 60，agent 缺省 pi，未配置 pi 块时 agentConfig 只有 path', () => {
+  const { configPath } = makeFixture();
   const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   delete raw.intervalSeconds;
   delete raw.agent;
@@ -53,8 +53,7 @@ test('缺省值：intervalSeconds 缺省 60，agent 缺省 pi，sessionDir 缺�
   const result = loadConfig(configPath);
   assert.strictEqual(result.intervalSeconds, 60);
   assert.strictEqual(result.agent, 'pi');
-  assert.strictEqual(result.agentConfig.sessionDir, dir);
-  assert.strictEqual(result.agentConfig.path, 'pi');
+  assert.deepStrictEqual(result.agentConfig, { path: 'pi' });
 });
 
 test('配置文件不是 JSON 对象时报错', () => {
@@ -152,14 +151,16 @@ test('agent 配置块为数组时报错', () => {
   assert.throws(() => loadConfig(configPath), /配置块必须是对象/);
 });
 
-test('agent 配置块出现未声明 key 时报错并列出允许值', () => {
-  const { configPath } = makeFixture({ pi: { sessionDir: './.pi-sessions', model: 'x' } });
-  assert.throws(() => loadConfig(configPath), /不允许字段 "model"，允许: sessionDir, path/);
+test('agent 配置块任意映射字段透传进 agentConfig', () => {
+  const { configPath } = makeFixture({ pi: { sessionDir: './.pi-sessions', model: 'x', thinking: 'max' } });
+  const result = loadConfig(configPath);
+  assert.strictEqual(result.agentConfig.model, 'x');
+  assert.strictEqual(result.agentConfig.thinking, 'max');
 });
 
 test('agent 配置块 sessionDir 非字符串时报错', () => {
   const { configPath } = makeFixture({ pi: { sessionDir: 123 } });
-  assert.throws(() => loadConfig(configPath), /sessionDir 必须是字符串/);
+  assert.throws(() => loadConfig(configPath), /字段 "sessionDir" 必须是字符串/);
 });
 
 test('agent 配置块 path 非字符串时报错', () => {
@@ -167,24 +168,23 @@ test('agent 配置块 path 非字符串时报错', () => {
   assert.throws(() => loadConfig(configPath), /path 必须是字符串/);
 });
 
-test('agent 配置块缺省时 agentConfig 用默认值', () => {
-  const { dir, configPath } = makeFixture();
+test('agent 配置块缺省时 agentConfig 只有 path 缺省值', () => {
+  const { configPath } = makeFixture();
   const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   delete raw.agent;
   delete raw.pi;
   fs.writeFileSync(configPath, JSON.stringify(raw), 'utf8');
   const result = loadConfig(configPath);
   assert.strictEqual(result.agent, 'pi');
-  assert.strictEqual(result.agentConfig.sessionDir, dir);
-  assert.strictEqual(result.agentConfig.path, 'pi');
+  assert.deepStrictEqual(result.agentConfig, { path: 'pi' });
 });
 
 test('claude 配置块缺省时 agentConfig.path 为 claude', () => {
-  const { dir, configPath } = makeFixture({ agent: 'claude' });
+  const { configPath } = makeFixture({ agent: 'claude' });
   const result = loadConfig(configPath);
   assert.strictEqual(result.agent, 'claude');
   assert.strictEqual(result.agentConfig.path, 'claude');
-  assert.strictEqual(result.agentConfig.sessionDir, dir);
+  assert.strictEqual(result.agentConfig.sessionDir, undefined);
 });
 
 test('claude 配置块 path 自定义', () => {
@@ -193,7 +193,35 @@ test('claude 配置块 path 自定义', () => {
   assert.strictEqual(result.agentConfig.path, '/opt/claude/bin/claude');
 });
 
-test('claude 配置块出现未声明 key 时报错并列出允许值', () => {
-  const { configPath } = makeFixture({ agent: 'claude', claude: { model: 'x' } });
-  assert.throws(() => loadConfig(configPath), /不允许字段 "model"，允许: path/);
+test('agent 配置块字段为数组时报错提示改用 args', () => {
+  const { configPath } = makeFixture({ pi: { sessionDir: './x', tags: ['a'] } });
+  assert.throws(() => loadConfig(configPath), /不能是数组，请改用 args/);
+});
+
+test('agent 配置块字段为对象时报错', () => {
+  const { configPath } = makeFixture({ pi: { sessionDir: './x', nested: { a: 1 } } });
+  assert.throws(() => loadConfig(configPath), /必须是字符串、数字或布尔值/);
+});
+
+test('agent 配置块 args 非字符串数组时报错', () => {
+  const { configPath } = makeFixture({ pi: { sessionDir: './x', args: [1] } });
+  assert.throws(() => loadConfig(configPath), /"args" 必须是字符串数组/);
+});
+
+test('agent 配置块 args 透传', () => {
+  const { configPath } = makeFixture({ pi: { sessionDir: './x', args: ['--a', '1'] } });
+  const result = loadConfig(configPath);
+  assert.deepStrictEqual(result.agentConfig.args, ['--a', '1']);
+});
+
+test('agent 配置块 false 值不报错并透传', () => {
+  const { configPath } = makeFixture({ pi: { sessionDir: './x', quiet: false } });
+  const result = loadConfig(configPath);
+  assert.strictEqual(result.agentConfig.quiet, false);
+});
+
+test('claude 配置块任意映射字段透传进 agentConfig', () => {
+  const { configPath } = makeFixture({ agent: 'claude', claude: { permissionMode: 'bypassPermissions' } });
+  const result = loadConfig(configPath);
+  assert.strictEqual(result.agentConfig.permissionMode, 'bypassPermissions');
 });

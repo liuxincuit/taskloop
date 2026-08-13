@@ -129,7 +129,7 @@ test('runAgent：claude 声明 stdin，prompt 写入子进程 stdin 并 end，st
     return child;
   };
   const result = await runAgent('处理 CS-1', {
-    agent: 'claude', cwd: '/work', agentConfig: { path: 'claude' }, spawnFn, isWin: true,
+    agent: 'claude', cwd: '/work', agentConfig: { path: 'claude', permissionMode: 'bypassPermissions' }, spawnFn, isWin: true,
   });
   assert.strictEqual(result.exitCode, 0);
   assert.strictEqual(spawnArgs.cmd, 'claude');

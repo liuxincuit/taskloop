@@ -38,3 +38,32 @@ test('buildPiArgs：sessionDir 透传', () => {
   });
   assert.deepStrictEqual(args, ['-p', '@/tmp/x.md', '--session-dir', '/sessions']);
 });
+
+test('buildPiArgs：映射参数（thinking/model）按书写顺序生成', () => {
+  const { args } = buildPiArgs('p', {
+    tmpFile: '/tmp/x.md',
+    cwd: '.',
+    agentConfig: { path: 'pi', sessionDir: '/s', thinking: 'max', model: 'x' },
+  });
+  assert.deepStrictEqual(args, [
+    '-p', '@/tmp/x.md', '--session-dir', '/s', '--thinking', 'max', '--model', 'x',
+  ]);
+});
+
+test('buildPiArgs：未配置 sessionDir 时不传 --session-dir', () => {
+  const { args } = buildPiArgs('p', {
+    tmpFile: '/tmp/x.md',
+    cwd: '.',
+    agentConfig: { path: 'pi' },
+  });
+  assert.deepStrictEqual(args, ['-p', '@/tmp/x.md']);
+});
+
+test('buildPiArgs：args 数组拼接在末尾', () => {
+  const { args } = buildPiArgs('p', {
+    tmpFile: '/tmp/x.md',
+    cwd: '.',
+    agentConfig: { path: 'pi', verbose: true, args: ['--extra', '1'] },
+  });
+  assert.deepStrictEqual(args, ['-p', '@/tmp/x.md', '--verbose', '--extra', '1']);
+});

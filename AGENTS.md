@@ -12,7 +12,7 @@ taskloop：定时从 YouTrack / Supermap Wiki / Supermap Jira 按标签抓取任
 - **零第三方依赖**：只允许 Node 内置模块（node:fs、node:http 等），不要 npm install 任何包
 - **CommonJS**：用 `require`/`module.exports`，不要写 ESM `import/export`
 - **中文错误消息**：src/ 的校验错误消息是中文，且被 test/ 正则断言（如 `/agent 必须是 "pi"/`），改措辞会挂测试
-- **扩展走注册表，只写实现不注册不会生效**：新任务来源 → 新建 `src/<name>.js` 导出 `fetchTasks(rule, { httpClient, url, token })`，并在 `src/sources.js` 注册（tokenEnv/urlEnv/defaultUrl/placeholders）；HTTP 请求复用 `src/youTrack.js` 的 `createHttpClient`（依赖注入，便于 mock）。新 agent → 新建 `src/<name>.js` 导出 `build<Name>Args(prompt, { tmpFile, cwd, agentConfig })` 纯函数，并在 `src/agents.js` 注册（含 optionKeys）；返回 `{ cmd, args }`，若 prompt 走 stdin（如 claude）返回 `{ cmd, args, stdin: true }`，由 agentRunner 写入子进程 stdin
+- **扩展走注册表，只写实现不注册不会生效**：新任务来源 → 新建 `src/<name>.js` 导出 `fetchTasks(rule, { httpClient, url, token })`，并在 `src/sources.js` 注册（tokenEnv/urlEnv/defaultUrl/placeholders）；HTTP 请求复用 `src/youTrack.js` 的 `createHttpClient`（依赖注入，便于 mock）。新 agent → 新建 `src/<name>.js` 导出 `build<Name>Args(prompt, { tmpFile, cwd, agentConfig })` 纯函数，并在 `src/agents.js` 注册（含 pathKeys，路径类 key 声明，值由 config.js 相对 config 目录解析）；返回 `{ cmd, args }`，若 prompt 走 stdin（如 claude）返回 `{ cmd, args, stdin: true }`，由 agentRunner 写入子进程 stdin。适配器只拼固定结构性参数（如 `-p @tmpfile`），其余参数用 `src/args.js` 的 `buildMappedArgs(agentConfig)` 按约定映射生成（camelCase→kebab-case、`true` 纯 flag、`false`/`null` 跳过），`agentConfig.args` 数组原样追加在末尾
 - **模板占位符**：任务级占位符由来源注册表声明（youtrack: {youtrack_id}/{youtrack_url}；wiki: {wiki_id}/{wiki_url}；jira: {jira_id}/{jira_url}），无值时原样保留；规则级 {labels}、{not_labels} 替换自规则配置
 - 版本号：修改 src/ 代码后，在该次改造的收尾提交按改造性质升 package.json version——feat（新功能）→ minor（0.1.0 → 0.2.0）、fix/refactor → patch、破坏性变更 → major；仅改 docs/、README、test/（补用例）、模板不升；不打 git tag
 
@@ -21,3 +21,4 @@ taskloop：定时从 YouTrack / Supermap Wiki / Supermap Jira 按标签抓取任
 - `config.json` 是本地配置（.gitignore 忽略，不提交）；改配置结构时同步更新 `config.example.json`
 - templates/ 下除 analyze.md 外均被 .gitignore 忽略（个人模板不提交），需要提交新模板须改 .gitignore
 - 环境变量：`SUPERMAP_YOUTRACK_TOKEN`、`SUPERMAP_WIKI_TOKEN`、`SUPERMAP_JIRA_TOKEN`（对应来源必需，缺失启动即报错退出）；`YOUTRACK_URL`、`WIKI_URL`、`JIRA_URL`（可选，覆盖默认地址）
+- agent 块任意字段经约定映射生成 CLI 参数：`"thinking": "max"` → `--thinking max`，`true` → `--key`，`false`/`null` 跳过，数组报错改用 `args` 数组原样透传；`path` 为命令名（缺省 agent 名），路径类 key（如 pi 的 `sessionDir`）相对 config 目录解析

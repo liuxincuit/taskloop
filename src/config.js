@@ -30,22 +30,31 @@ function loadConfig(configPath) {
       (typeof agentBlock !== 'object' || agentBlock === null || Array.isArray(agentBlock))) {
     throw new Error(`${agent} 配置块必须是对象`);
   }
-  const allowedKeys = agents[agent].optionKeys;
-  for (const key of Object.keys(agentBlock ?? {})) {
-    if (!allowedKeys.includes(key)) {
-      throw new Error(`${agent} 配置块不允许字段 "${key}"，允许: ${allowedKeys.join(', ')}`);
+  const pathKeys = agents[agent].pathKeys;
+  for (const [key, value] of Object.entries(agentBlock ?? {})) {
+    if (key === 'path') {
+      if (typeof value !== 'string') {
+        throw new Error(`${agent} 配置块的 path 必须是字符串`);
+      }
+    } else if (key === 'args') {
+      if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) {
+        throw new Error(`${agent} 配置块字段 "args" 必须是字符串数组`);
+      }
+    } else if (pathKeys.includes(key)) {
+      if (typeof value !== 'string') {
+        throw new Error(`${agent} 配置块字段 "${key}" 必须是字符串`);
+      }
+    } else if (Array.isArray(value)) {
+      throw new Error(`${agent} 配置块字段 "${key}" 不能是数组，请改用 args`);
+    } else if (value !== null && typeof value === 'object') {
+      throw new Error(`${agent} 配置块字段 "${key}" 必须是字符串、数字或布尔值`);
     }
   }
-  if (agentBlock?.sessionDir !== undefined && typeof agentBlock.sessionDir !== 'string') {
-    throw new Error(`${agent} 配置块的 sessionDir 必须是字符串`);
+  const agentConfig = { path: agentBlock?.path ?? agent };
+  for (const [key, value] of Object.entries(agentBlock ?? {})) {
+    if (key === 'path') continue;
+    agentConfig[key] = pathKeys.includes(key) ? path.resolve(configDir, value) : value;
   }
-  if (agentBlock?.path !== undefined && typeof agentBlock.path !== 'string') {
-    throw new Error(`${agent} 配置块的 path 必须是字符串`);
-  }
-  const agentConfig = {
-    sessionDir: agentBlock?.sessionDir ? path.resolve(configDir, agentBlock.sessionDir) : configDir,
-    path: agentBlock?.path ?? agent,
-  };
   const rules = raw.rules.map((rule, i) => {
     if (typeof rule !== 'object' || rule === null || Array.isArray(rule)) {
       throw new Error(`rules[${i}] 必须是对象`);

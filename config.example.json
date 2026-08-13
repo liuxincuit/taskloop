@@ -2,7 +2,9 @@
   "intervalSeconds": 60,
   "agent": "pi",
   "pi": {
-    "sessionDir": "./.pi-sessions"
+    "sessionDir": "./.pi-sessions",
+    "thinking": "max",
+    "model": "deepseek-v4-flash"
   },
   "rules": [
     {

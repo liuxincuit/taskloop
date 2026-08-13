@@ -90,32 +90,42 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程
 
 ### agent 专属配置块
 
-顶层 `{agent}` 命名的对象（如 `pi`、`claude`）存放该 agent 的专属配置，只允许注册表声明的字段，出现未声明字段启动报错：
+顶层 `{agent}` 命名的对象（如 `pi`、`claude`）存放该 agent 的调用参数。除保留字段外，任意字段经约定映射生成 CLI 参数：
 
-#### `pi` 块
+| 配置值类型 | 生成的 CLI 参数 |
+| --- | --- |
+| 字符串/数字 `"key": "v"` | `--key v`（camelCase 自动转 kebab-case，如 `permissionMode` → `--permission-mode`） |
+| `true` | `--key`（纯 flag） |
+| `false` / `null` | 跳过不传 |
+| 数组 | 启动报错，改用 `args` |
 
-| 字段 | 必需 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| `sessionDir` | 否 | config 文件所在目录 | pi 会话保存目录（相对配置文件解析） |
-| `path` | 否 | `pi` | pi 可执行文件命令名或完整路径 |
+保留/特殊字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `path` | 可执行文件命令名或完整路径，缺省为 agent 名（`"pi"`/`"claude"`），不参与映射 |
+| `args` | 字符串数组，原样拼接在所有参数之后（表达重复 flag 等映射覆盖不了的场景） |
+| 路径类 key | 注册表 `pathKeys` 声明的 key（如 pi 的 `sessionDir`），值相对 config 文件所在目录解析为绝对路径后，作为普通映射参数生成 |
+
+> 注意：路径类 key（如 pi 的 `sessionDir`）例外——值必须是非空字符串，设为 `null` 等非字符串会在启动时报错，而不是跳过。
+
+固定结构性参数：`-p @tmpfile`（pi）/ `-p` + stdin（claude）是 prompt 传递机制，代码固定、不可配置。参数顺序：结构性参数 → 映射参数（config 书写顺序）→ `args`。
 
 ```json
 {
   "agent": "pi",
-  "pi": { "sessionDir": "./.pi-sessions", "path": "pi" }
+  "pi": { "sessionDir": "./.pi-sessions", "thinking": "max", "model": "deepseek-v4-flash" }
 }
 ```
 
-#### `claude` 块
+生成命令行：`pi -p @<tmpfile> --session-dir <绝对路径> --thinking max --model deepseek-v4-flash`。
 
-| 字段 | 必需 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| `path` | 否 | `claude` | claude 可执行文件命令名或完整路径 |
+claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显式配置：
 
 ```json
 {
   "agent": "claude",
-  "claude": { "path": "claude" }
+  "claude": { "permissionMode": "bypassPermissions" }
 }
 ```
 
@@ -232,12 +242,15 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程
 
    ```js
    // src/myagent.js
+   const { buildMappedArgs } = require('./args.js');
+
    function buildMyagentArgs(prompt, { tmpFile, cwd, agentConfig }) {
-     return {
-       cmd: agentConfig.path ?? 'myagent',
-       args: ['-p', prompt],   // 具体参数以该 CLI 的非交互用法为准
-     };
+     const cmd = agentConfig?.path ?? 'myagent';
+     const args = ['-p', '@' + tmpFile, ...buildMappedArgs(agentConfig)];
+     if (Array.isArray(agentConfig?.args)) args.push(...agentConfig.args);
+     return { cmd, args };
    }
+
    module.exports = { buildMyagentArgs };
    ```
 
@@ -245,20 +258,20 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程
 
    返回值为 `{ cmd, args }`；若该 CLI 的 prompt 经 stdin 读取（如 claude），返回 `{ cmd, args, stdin: true }`——通用层会把 prompt 写入子进程 stdin（win32 下比内联 argv 更稳，避免 prompt 被 shell 引号拆坏）。
 
-2. **在 `src/agents.js` 注册一行**，声明专属配置项：
+2. **在 `src/agents.js` 注册一行**，声明路径类 key（值由 config 相对 config 文件目录解析为绝对路径，如 pi 的 `sessionDir`）：
 
    ```js
    const agents = {
-     pi: { buildArgs: buildPiArgs, optionKeys: ['sessionDir', 'path'] },
-     claude: { buildArgs: buildClaudeArgs, optionKeys: ['path'] },
-     myagent: { buildArgs: buildMyagentArgs, optionKeys: ['path'] },
+     pi: { buildArgs: buildPiArgs, pathKeys: ['sessionDir'] },
+     claude: { buildArgs: buildClaudeArgs, pathKeys: [] },
+     myagent: { buildArgs: buildMyagentArgs, pathKeys: [] },
    };
    ```
 
-   注册后自动获得：`config` 的 `agent` 校验（错误消息列出合法值）、`{agent}` 配置块 key 校验（只允许 `optionKeys` 声明的字段）、`main` 按 agent 分发、通用执行层。config 用法：
+   注册后自动获得：`config` 的 `agent` 校验（错误消息列出合法值）、`{agent}` 配置块校验（任意字段经约定映射生成 CLI 参数，见「agent 专属配置块」）、`main` 按 agent 分发、通用执行层。config 用法：
 
    ```json
-   { "agent": "myagent", "myagent": { "path": "myagent" } }
+   { "agent": "myagent", "myagent": { "path": "myagent", "model": "x" } }
    ```
 
 ## 测试
