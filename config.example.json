@@ -1,6 +1,7 @@
 {
   "intervalSeconds": 60,
   "agent": "pi",
+  "envFile": "~/.pi/agent/.env",
   "pi": {
     "sessionDir": "./.pi-sessions",
     "thinking": "max",

@@ -1,7 +1,17 @@
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { agents, AGENT_KEYS } = require('./agents.js');
 const { SOURCE_KEYS } = require('./sources.js');
+
+// envFile 路径解析：~ 展开为 home 目录，其余相对 config 目录解析为绝对路径
+function resolveEnvFile(configDir, envFile) {
+  if (envFile === '~') return os.homedir();
+  if (envFile.startsWith('~/') || envFile.startsWith('~\\')) {
+    return path.join(os.homedir(), envFile.slice(2));
+  }
+  return path.resolve(configDir, envFile);
+}
 
 function loadConfig(configPath) {
   let raw;
@@ -24,6 +34,10 @@ function loadConfig(configPath) {
   const agent = raw.agent ?? 'pi';
   if (typeof agent !== 'string' || !AGENT_KEYS.includes(agent)) {
     throw new Error(`agent 必须是 ${AGENT_KEYS.map((k) => `"${k}"`).join(' 或 ')}`);
+  }
+  const envFile = raw.envFile;
+  if (envFile !== undefined && (typeof envFile !== 'string' || envFile.length === 0)) {
+    throw new Error('envFile 必须是非空字符串');
   }
   const agentBlock = raw[agent];
   if (agentBlock !== undefined &&
@@ -90,7 +104,13 @@ function loadConfig(configPath) {
       promptTemplate: templatePath,
     };
   });
-  return { intervalSeconds, agent, agentConfig, rules };
+  return {
+    intervalSeconds,
+    agent,
+    agentConfig,
+    envFile: envFile === undefined ? undefined : resolveEnvFile(configDir, envFile),
+    rules,
+  };
 }
 
 module.exports = { loadConfig };

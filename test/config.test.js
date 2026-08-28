@@ -225,3 +225,28 @@ test('claude 配置块任意映射字段透传进 agentConfig', () => {
   const result = loadConfig(configPath);
   assert.strictEqual(result.agentConfig.permissionMode, 'bypassPermissions');
 });
+
+test('envFile：相对 config 目录解析为绝对路径', () => {
+  const { dir, configPath } = makeFixture({ envFile: './.env' });
+  const result = loadConfig(configPath);
+  assert.strictEqual(result.envFile, path.join(dir, '.env'));
+});
+
+test('envFile：~ 展开为 home 目录', () => {
+  const { configPath } = makeFixture({ envFile: '~/.pi/agent/.env' });
+  const result = loadConfig(configPath);
+  assert.strictEqual(result.envFile, path.join(os.homedir(), '.pi', 'agent', '.env'));
+});
+
+test('envFile：未配置时为 undefined', () => {
+  const { configPath } = makeFixture();
+  const result = loadConfig(configPath);
+  assert.strictEqual(result.envFile, undefined);
+});
+
+test('envFile：非字符串或空字符串报错', () => {
+  const { configPath: p1 } = makeFixture({ envFile: 123 });
+  assert.throws(() => loadConfig(p1), /envFile 必须是非空字符串/);
+  const { configPath: p2 } = makeFixture({ envFile: '' });
+  assert.throws(() => loadConfig(p2), /envFile 必须是非空字符串/);
+});

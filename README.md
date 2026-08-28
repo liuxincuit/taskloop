@@ -59,6 +59,14 @@
 
 只对配置中实际使用到的来源要求 token：只配 wiki 规则时无需设置 `SUPERMAP_YOUTRACK_TOKEN`，反之亦然。token 缺失时启动即报错退出（`环境错误: 未设置 ...`）。
 
+token 也可以不放进环境变量，而是在 `config.json` 顶层通过 `envFile` 字段指定一个 `KEY=VALUE` 格式的文件（支持 `#` 注释、空行、引号，与 pi 的 `~/.pi/agent/.env` 一致）：
+
+```json
+{ "envFile": "~/.pi/agent/.env" }
+```
+
+路径支持 `~` 展开为 home 目录，其余相对 `config.json` 所在目录解析。env 文件的值只补充不覆盖已有环境变量（显式设置的环境变量优先）；显式配置了 `envFile` 但文件不存在时启动报错退出（`环境错误: 无法读取 env 文件 ...`），未配置 `envFile` 时行为与直接设置环境变量一致。
+
 ### 3. 创建本地配置
 
 复制示例配置为 `config.json`（已被 .gitignore 忽略，不会提交）：
@@ -86,6 +94,7 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程
 | --- | --- | --- | --- |
 | `intervalSeconds` | 否 | `60` | 轮询间隔（正整数，秒） |
 | `agent` | 否 | `pi` | 执行 agent 的注册表 key，目前 `pi` / `claude`；非法值启动报错并列出合法值 |
+| `envFile` | 否 | — | 环境变量文件路径（`KEY=VALUE` 格式），`~` 展开为 home 目录，其余相对 config 文件目录解析；仅补充不覆盖已有环境变量；文件不存在启动报错 |
 | `rules` | 是 | — | 规则数组，非空 |
 
 ### agent 专属配置块

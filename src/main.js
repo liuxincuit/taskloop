@@ -3,6 +3,7 @@ const { spawnSync } = require('node:child_process');
 const { filterTasks } = require('./filter.js');
 const { renderTemplateFile } = require('./template.js');
 const { createHttpClient } = require('./youTrack.js');
+const { loadEnv } = require('./env.js');
 const { sources, SOURCE_KEYS, buildPlaceholders } = require('./sources.js');
 const { runAgent } = require('./agentRunner.js');
 const { loadConfig } = require('./config.js');
@@ -112,7 +113,8 @@ async function main(argv = process.argv) {
   }
   let env;
   try {
-    env = resolveEnv(config);
+    // env 文件只补充不覆盖已有环境变量（显式设置的环境变量优先）
+    env = resolveEnv(config, { ...loadEnv(config.envFile), ...process.env });
   } catch (err) {
     console.error(`环境错误: ${err.message}`);
     process.exit(1);
