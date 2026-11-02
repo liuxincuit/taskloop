@@ -27,6 +27,13 @@
       "notLabels": ["explored"],
       "assignee": "me",
       "promptTemplate": "templates/analyze.md"
+    },
+    {
+      "source": "scrum",
+      "labels": ["taskloop"],
+      "notLabels": ["explored"],
+      "assignee": "me",
+      "promptTemplate": "templates/analyze.md"
     }
   ]
 }

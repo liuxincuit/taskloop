@@ -19,6 +19,7 @@
 | `youtrack` | YouTrack | `/api/issues` 按标签与指派查询 | `{youtrack_id}`、`{youtrack_url}` |
 | `wiki` | Supermap Confluence Wiki | `/rest/api/search` 按创建者（creator）与标签（CQL）查询 | `{wiki_id}`、`{wiki_url}` |
 | `jira` | Supermap Jira | `/rest/api/2/search` 按标签（JQL `labels IN`）与指派查询 | `{jira_id}`、`{jira_url}` |
+| `scrum` | Supermap Scrum | `/rest/api/2/search` 按标签（JQL `labels IN`）与指派查询 | `{scrum_id}`、`{scrum_url}` |
 
 来源与任务形状统一为：`{ id, idReadable, title, url, labels }`（`title`、`url` 可为空）。
 
@@ -39,6 +40,12 @@
 - 查询：JQL `labels IN (...) [AND labels NOT IN (...)] [AND assignee = currentUser() | assignee = "用户名"]`，最多 100 条
 - `{jira_id}` 替换为 issue key（如 `ISVJ-12228`）；`{jira_url}` 为 browse 链接（`https://<host>/browse/<key>`）
 
+### Scrum 来源
+
+- Scrum（scrum.supermap.work）是 Jira Server 内核，查询、字段与链接格式与 Jira 来源一致，实现上复用 `jira.js`
+- 查询：JQL `labels IN (...) [AND labels NOT IN (...)] [AND assignee = currentUser() | assignee = "用户名"]`，最多 100 条
+- `{scrum_id}` 替换为 issue key（如 `ISVS-1165`）；`{scrum_url}` 为 browse 链接（`https://<host>/browse/<key>`）
+
 ## 快速开始
 
 ### 1. 环境要求
@@ -53,9 +60,11 @@
 | `SUPERMAP_YOUTRACK_TOKEN` | 使用 `youtrack` 规则时必需 | YouTrack API token |
 | `SUPERMAP_WIKI_TOKEN` | 使用 `wiki` 规则时必需 | Confluence API token |
 | `SUPERMAP_JIRA_TOKEN` | 使用 `jira` 规则时必需 | Jira API token |
+| `SUPERMAP_SCRUM_TOKEN` | 使用 `scrum` 规则时必需 | Scrum API token |
 | `YOUTRACK_URL` | 可选 | 覆盖默认地址 `http://yt.ispeco.com:8099` |
 | `WIKI_URL` | 可选 | 覆盖默认地址 `https://wiki.ispeco.com` |
 | `JIRA_URL` | 可选 | 覆盖默认地址 `https://jira.supermap.work` |
+| `SCRUM_URL` | 可选 | 覆盖默认地址 `https://scrum.supermap.work` |
 
 只对配置中实际使用到的来源要求 token：只配 wiki 规则时无需设置 `SUPERMAP_YOUTRACK_TOKEN`，反之亦然。token 缺失时启动即报错退出（`环境错误: 未设置 ...`）。
 
@@ -135,7 +144,7 @@ claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显�
 
 | 字段 | 必需 | 说明 |
 | --- | --- | --- |
-| `source` | 否 | 来源 key，缺省 `youtrack`；非法值报错（`rules[i].source 必须是 "youtrack" 或 "wiki" 或 "jira"`） |
+| `source` | 否 | 来源 key，缺省 `youtrack`；非法值报错（`rules[i].source 必须是 "youtrack" 或 "wiki" 或 "jira" 或 "scrum"`） |
 | `labels` | 是 | 非空字符串数组；任务必须**全部**包含这些标签（AND） |
 | `notLabels` | 否 | 字符串数组；任务包含任一标签即被排除 |
 | `assignee` | 否 | 来源语义不同，见下 |
@@ -148,6 +157,7 @@ claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显�
 | `youtrack` | `assignee: me`（token 对应用户） | `assignee: {用户名}` |
 | `wiki` | `creator = currentUser()`（token 对应账号） | `creator = "用户名"` |
 | `jira` | `assignee = currentUser()`（token 对应账号） | `assignee = "用户名"` |
+| `scrum` | `assignee = currentUser()`（token 对应账号） | `assignee = "用户名"` |
 
 ### 模板占位符
 
@@ -158,6 +168,7 @@ claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显�
 - youtrack：`{youtrack_id}`（如 `CS-1`）、`{youtrack_url}`
 - wiki：`{wiki_id}`（页面 id）、`{wiki_url}`（页面完整 URL）
 - jira：`{jira_id}`（issue key，如 `ISVJ-12228`）、`{jira_url}`（browse 链接）
+- scrum：`{scrum_id}`（issue key，如 `ISVS-1165`）、`{scrum_url}`（browse 链接）
 
 规则级（所有来源）：
 
@@ -229,6 +240,16 @@ claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显�
          jira_url: (task) => task.url,
        },
      },
+     scrum: {
+       fetchTasks: scrumFetchTasks,
+       tokenEnv: 'SUPERMAP_SCRUM_TOKEN',
+       urlEnv: 'SCRUM_URL',
+       defaultUrl: 'https://scrum.supermap.work',
+       placeholders: {
+         scrum_id: (task) => task.idReadable,
+         scrum_url: (task) => task.url,
+       },
+     },
    };
    ```
 
@@ -294,6 +315,7 @@ src/
   youTrack.js     # YouTrack 抓取 + 通用 httpClient
   wiki.js         # Wiki 抓取（buildCql + fetchWikiTasks）
   jira.js         # Jira 抓取（buildJql + fetchTasks）
+  scrum.js        # Scrum 抓取（复用 jira.js 的 JQL 与映射）
   agents.js       # Agent 注册表（新增 agent 只改这里）
   agentRunner.js  # 通用执行层（临时文件、spawn、退出码、win32 引号）
   piRunner.js     # pi 适配器（纯函数，prompt → spawn 参数映射）

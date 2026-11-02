@@ -1,6 +1,7 @@
 const { fetchTasks } = require('./youTrack.js');
 const { fetchWikiTasks } = require('./wiki.js');
 const { fetchTasks: fetchJiraTasks } = require('./jira.js');
+const { fetchTasks: fetchScrumTasks } = require('./scrum.js');
 
 // 新增来源：创建 src/<name>.js 导出 fetchTasks(rule, {httpClient, url, token})，
 // 然后在此注册一行（fetch 实现 + token 环境变量名 + URL 环境变量名 + 默认 URL + placeholders）
@@ -33,6 +34,16 @@ const sources = {
     placeholders: {
       jira_id: (task) => task.idReadable,
       jira_url: (task) => task.url,
+    },
+  },
+  scrum: {
+    fetchTasks: fetchScrumTasks,
+    tokenEnv: 'SUPERMAP_SCRUM_TOKEN',
+    urlEnv: 'SCRUM_URL',
+    defaultUrl: 'https://scrum.supermap.work',
+    placeholders: {
+      scrum_id: (task) => task.idReadable,
+      scrum_url: (task) => task.url,
     },
   },
 };
