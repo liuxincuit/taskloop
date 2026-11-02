@@ -30,10 +30,9 @@
     },
     {
       "source": "scrum",
-      "labels": ["taskloop"],
-      "notLabels": ["explored"],
-      "assignee": "me",
-      "promptTemplate": "templates/analyze.md"
+      "labels": ["foo"],
+      "notLabels": ["bar"],
+      "promptTemplate": "templates/scrum-test.md"
     }
   ]
 }
