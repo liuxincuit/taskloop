@@ -28,6 +28,12 @@
       "notLabels": ["explored"],
       "assignee": "me",
       "promptTemplate": "templates/analyze.md"
+    },
+    {
+      "source": "scrum",
+      "labels": ["foo"],
+      "notLabels": ["bar"],
+      "promptTemplate": "templates/scrum-test.md"
     }
   ]
 }

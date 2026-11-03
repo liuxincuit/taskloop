@@ -12,6 +12,7 @@ config.json
 templates/*
 !templates/analyze.md
 !templates/example-workflow.md
+!templates/scrum-test.md
 
 # 模板片段目录：仅提交 example-output.md 作为 include 用法示例，其余为个人模板不提交
 !templates/parts/

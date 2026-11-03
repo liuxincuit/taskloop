@@ -2,11 +2,12 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { sources, SOURCE_KEYS, buildPlaceholders } = require('../src/sources.js');
 
-test('注册表包含 youtrack、wiki、jira 三个来源', () => {
-  assert.deepStrictEqual(SOURCE_KEYS, ['youtrack', 'wiki', 'jira']);
+test('注册表包含 youtrack、wiki、jira、scrum 四个来源', () => {
+  assert.deepStrictEqual(SOURCE_KEYS, ['youtrack', 'wiki', 'jira', 'scrum']);
   assert.strictEqual(typeof sources.youtrack.fetchTasks, 'function');
   assert.strictEqual(typeof sources.wiki.fetchTasks, 'function');
   assert.strictEqual(typeof sources.jira.fetchTasks, 'function');
+  assert.strictEqual(typeof sources.scrum.fetchTasks, 'function');
   assert.strictEqual(sources.youtrack.tokenEnv, 'SUPERMAP_YOUTRACK_TOKEN');
   assert.strictEqual(sources.youtrack.defaultUrl, 'http://yt.ispeco.com:8099');
   assert.strictEqual(sources.wiki.tokenEnv, 'SUPERMAP_WIKI_TOKEN');
@@ -14,6 +15,9 @@ test('注册表包含 youtrack、wiki、jira 三个来源', () => {
   assert.strictEqual(sources.jira.tokenEnv, 'SUPERMAP_JIRA_TOKEN');
   assert.strictEqual(sources.jira.urlEnv, 'JIRA_URL');
   assert.strictEqual(sources.jira.defaultUrl, 'https://jira.supermap.work');
+  assert.strictEqual(sources.scrum.tokenEnv, 'SUPERMAP_SCRUM_TOKEN');
+  assert.strictEqual(sources.scrum.urlEnv, 'SCRUM_URL');
+  assert.strictEqual(sources.scrum.defaultUrl, 'https://scrum.supermap.work');
 });
 
 test('占位符声明：youtrack 提供 id 与 url', () => {
@@ -32,6 +36,12 @@ test('占位符声明：jira 提供 id 与 url', () => {
   const task = { idReadable: 'ISVJ-1', url: 'http://j' };
   assert.strictEqual(sources.jira.placeholders.jira_id(task), 'ISVJ-1');
   assert.strictEqual(sources.jira.placeholders.jira_url(task), 'http://j');
+});
+
+test('占位符声明：scrum 提供 id 与 url', () => {
+  const task = { idReadable: 'ISVS-1165', url: 'http://s' };
+  assert.strictEqual(sources.scrum.placeholders.scrum_id(task), 'ISVS-1165');
+  assert.strictEqual(sources.scrum.placeholders.scrum_url(task), 'http://s');
 });
 
 test('buildPlaceholders：来源占位符 + 规则级占位符', () => {
