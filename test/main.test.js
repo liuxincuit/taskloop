@@ -152,6 +152,27 @@ test('runCycle：runAgent 非零退出码不中断循环', async () => {
   assert.deepStrictEqual(ran, ['处理任务 CS-1', '处理任务 CS-2']);
 });
 
+test('runCycle：runAgent 抛错时跳过该任务继续', async () => {
+  const config = makeFixtureConfig();
+  const ran = [];
+  const deps = makeDeps({
+    sources: {
+      youtrack: { fetchTasks: async () => [
+        { id: '1', idReadable: 'CS-1', labels: ['readyed'] },
+        { id: '2', idReadable: 'CS-2', labels: ['readyed'] },
+      ] },
+      wiki: { fetchTasks: async () => [] },
+    },
+    runAgent: async (p) => {
+      if (p.includes('CS-1')) throw new Error('spawn pi ENOENT');
+      ran.push(p);
+      return { exitCode: 0 };
+    },
+  });
+  await assert.doesNotReject(runCycle({ config, deps, round: 1 }));
+  assert.deepStrictEqual(ran, ['处理任务 CS-2']);
+});
+
 test('runCycle：shouldStop 时提前返回', async () => {
   const config = makeFixtureConfig();
   let calls = 0;

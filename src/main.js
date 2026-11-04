@@ -90,13 +90,19 @@ async function runCycle({ config, deps, round }) {
         continue;
       }
       log(`[${task.idReadable}] 开始执行（模板: ${rule.promptTemplate}）`);
-      const { exitCode } = await deps.runAgent(prompt, {
-        agent: config.agent,
-        cwd: deps.cwd,
-        agentConfig: config.agentConfig,
-        onChild: deps.onChild,
-      });
-      log(`[${task.idReadable}] 完成（退出码 ${exitCode}）`);
+      let result;
+      try {
+        result = await deps.runAgent(prompt, {
+          agent: config.agent,
+          cwd: deps.cwd,
+          agentConfig: config.agentConfig,
+          onChild: deps.onChild,
+        });
+      } catch (err) {
+        log(`[${task.idReadable}] 执行失败: ${err.message}`);
+        continue;
+      }
+      log(`[${task.idReadable}] 完成（退出码 ${result.exitCode}）`);
     }
   }
   log(`轮次 ${round} 结束，等待 ${config.intervalSeconds} 秒`);
