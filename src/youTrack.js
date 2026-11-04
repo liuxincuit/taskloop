@@ -31,6 +31,9 @@ function createHttpClient(tokenEnvName = 'SUPERMAP_YOUTRACK_TOKEN') {
         },
         (res) => {
           let data = '';
+          // 必须让 StringDecoder 处理多字节字符：直接对 Buffer 逐块 toString 会在 TCP
+          // 分段处把汉字劈成两个 U+FFFD，导致标签匹配静默失败
+          res.setEncoding('utf8');
           res.on('data', (chunk) => { data += chunk; });
           res.on('end', () => {
             if (res.statusCode >= 200 && res.statusCode < 300) {

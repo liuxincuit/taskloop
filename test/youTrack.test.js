@@ -121,6 +121,26 @@ test('createHttpClient：200 返回 JSON', async () => {
   }
 });
 
+test('createHttpClient：响应跨 TCP 分段时多字节 UTF-8 不乱码', async () => {
+  const payload = { labels: ['需求评审', '中文标签'.repeat(100)] };
+  const body = Buffer.from(JSON.stringify(payload), 'utf8');
+  const cut = body.indexOf(Buffer.from('需')) + 1; // 落在汉字 3 字节中间
+  const server = await startServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.write(body.subarray(0, cut));
+    // 延迟 end，确保两段作为独立 data 事件到达客户端
+    setTimeout(() => res.end(body.subarray(cut)), 10);
+  });
+  try {
+    const client = createHttpClient();
+    const url = new URL(`http://127.0.0.1:${server.address().port}/`);
+    const data = await client(url, { token: 't' });
+    assert.deepStrictEqual(data, payload);
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('createHttpClient：401 抛认证失败', async () => {
   const server = await startServer((req, res) => {
     res.writeHead(401);
