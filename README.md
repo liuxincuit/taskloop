@@ -218,6 +218,11 @@ claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显�
 2. **在 `src/sources.js` 注册一行**（注册项含 `placeholders`，声明该来源的任务级占位符）：
 
    ```js
+   const { fetchTasks } = require('./youTrack.js');
+   const { fetchWikiTasks } = require('./wiki.js');
+   const { fetchTasks: fetchJiraTasks } = require('./jira.js');
+   const { fetchTasks: fetchScrumTasks } = require('./scrum.js');
+
    const sources = {
      youtrack: {
        fetchTasks,
@@ -240,7 +245,7 @@ claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显�
        },
      },
      jira: {
-       fetchTasks: jiraFetchTasks,
+       fetchTasks: fetchJiraTasks,
        tokenEnv: 'SUPERMAP_JIRA_TOKEN',
        urlEnv: 'JIRA_URL',
        defaultUrl: 'https://jira.supermap.work',
@@ -250,7 +255,7 @@ claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显�
        },
      },
      scrum: {
-       fetchTasks: scrumFetchTasks,
+       fetchTasks: fetchScrumTasks,
        tokenEnv: 'SUPERMAP_SCRUM_TOKEN',
        urlEnv: 'SCRUM_URL',
        defaultUrl: 'https://scrum.supermap.work',
