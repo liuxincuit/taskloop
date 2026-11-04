@@ -68,6 +68,36 @@ test('runAgent：执行后删除临时文件', async () => {
   assert.strictEqual(fs.existsSync(tmpPath), false);
 });
 
+test('runAgent：win32 下 path 含空格时对 cmd 加引号', async () => {
+  let spawnArgs = null;
+  const spawnFn = (cmd, args, opts) => {
+    spawnArgs = { cmd, args, opts };
+    return makeFakeChild(0);
+  };
+  await runAgent('x', {
+    agent: 'pi', cwd: '/work',
+    agentConfig: { path: 'C:\\Program Files\\pi\\pi.cmd' },
+    spawnFn, isWin: true,
+  });
+  assert.strictEqual(spawnArgs.cmd, '"C:\\Program Files\\pi\\pi.cmd"');
+  assert.strictEqual(spawnArgs.opts.shell, true);
+});
+
+test('runAgent：非 win32 下 cmd 保持原样（即使含空格）', async () => {
+  let spawnArgs = null;
+  const spawnFn = (cmd, args, opts) => {
+    spawnArgs = { cmd, args, opts };
+    return makeFakeChild(0);
+  };
+  await runAgent('x', {
+    agent: 'pi', cwd: '/work',
+    agentConfig: { path: '/opt/my tools/pi' },
+    spawnFn, isWin: false,
+  });
+  assert.strictEqual(spawnArgs.cmd, '/opt/my tools/pi');
+  assert.strictEqual(spawnArgs.opts.shell, undefined);
+});
+
 test('runAgent：非零退出码返回且不抛异常', async () => {
   const result = await runAgent('x', {
     agent: 'pi', cwd: '.', agentConfig, spawnFn: () => makeFakeChild(1),

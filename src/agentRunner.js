@@ -13,10 +13,12 @@ async function runAgent(prompt, { agent, cwd, agentConfig, spawnFn = spawn, onCh
     fs.writeFileSync(tmpFile, prompt, 'utf8');
     const { cmd, args, stdin } = agents[agent].buildArgs(prompt, { tmpFile, cwd, agentConfig });
     // win32 shell:true 下含空格的路径会被拆分，统一对非 flag 参数（不以 - 开头）包引号；
-    // 适配器返回的 args 一律不带引号
+    // 适配器返回的 args 一律不带引号。命令本身含空格（如 C:\Program Files\...）同样会被
+    // cmd.exe 拆分，需一并加引号，否则 path 类安装目录直接启动失败。
+    const finalCmd = isWin && /\s/.test(cmd) && !cmd.startsWith('"') ? `"${cmd}"` : cmd;
     const finalArgs = isWin ? args.map((a) => (a.startsWith('-') ? a : `"${a}"`)) : args;
     const exitCode = await new Promise((resolve, reject) => {
-      const child = spawnFn(cmd, finalArgs, {
+      const child = spawnFn(finalCmd, finalArgs, {
         cwd,
         stdio: stdin ? ['pipe', 'inherit', 'inherit'] : 'inherit',
         ...(isWin ? { shell: true } : {}),
