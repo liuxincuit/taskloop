@@ -1,9 +1,27 @@
 {
   "name": "taskloop",
-  "private": true,
-  "version": "0.4.2",
-  "description": "定时从多个任务来源按标签抓取任务，交给 AI Agent 非交互模式自动执行",
+  "version": "1.0.0",
+  "description": "定时从多个任务来源按标签抓取任务，交给 pi SDK 在进程内自动执行处理的循环 Worker，带 Web 控制台",
+  "bin": {
+    "taskloop": "src/server.js"
+  },
+  "files": [
+    "src/",
+    "templates/analyze.md",
+    "templates/example-workflow.md",
+    "templates/scrum-test.md",
+    "templates/parts/example-output.md",
+    "config.example.json"
+  ],
   "scripts": {
+    "start": "node src/server.js",
+    "cli": "node src/main.js",
     "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^1.5.2"
   }
 }

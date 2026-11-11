@@ -18,3 +18,9 @@ templates/*
 !templates/parts/
 templates/parts/*
 !templates/parts/example-output.md
+
+# 依赖目录（SDK 引入后必需）
+node_modules/
+
+# npm 打包产物
+*.tgz

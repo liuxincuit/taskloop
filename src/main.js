@@ -1,176 +1,90 @@
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const { filterTasks } = require('./filter.js');
-const { renderTemplateFile } = require('./template.js');
-const { createHttpClient } = require('./youTrack.js');
-const { loadEnv } = require('./env.js');
-const { sources, SOURCE_KEYS, buildPlaceholders } = require('./sources.js');
-const { runAgent } = require('./agentRunner.js');
-const { loadConfig } = require('./config.js');
+const { Worker } = require('./worker.js');
+const { StateStore } = require('./state.js');
+const { createDefaultConfig } = require('./config.js');
 
-function timestamp() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
-    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+const DEFAULT_CONFIG_PATH = path.join(os.homedir(), '.taskloop', 'config.json');
+
+/** 首次启动且默认位置没有配置时，生成一份可直接运行的配置（含模板文件） */
+function ensureConfigFile(configPath) {
+  if (fs.existsSync(configPath)) return false;
+
+  const configDir = path.dirname(configPath);
+  fs.mkdirSync(configDir, { recursive: true });
+
+  const templateDir = path.join(configDir, 'templates');
+  fs.mkdirSync(templateDir, { recursive: true });
+  const bundledTemplate = path.join(__dirname, '..', 'templates', 'analyze.md');
+  const targetTemplate = path.join(templateDir, 'analyze.md');
+  if (!fs.existsSync(targetTemplate) && fs.existsSync(bundledTemplate)) {
+    fs.copyFileSync(bundledTemplate, targetTemplate);
+  }
+
+  fs.writeFileSync(configPath, `${JSON.stringify(createDefaultConfig(), null, 2)}\n`, 'utf8');
+  return true;
 }
 
-function log(msg) {
-  console.log(`[${timestamp()}] ${msg}`);
-}
-
-function sleep(ms, shouldStop) {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      clearInterval(interval);
-      resolve();
-    }, ms);
-    const interval = setInterval(() => {
-      if (shouldStop?.()) {
-        clearTimeout(timer);
-        clearInterval(interval);
-        resolve();
-      }
-    }, 200);
-    interval.unref?.();
+/** CLI 模式也落盘：重启后能恢复历史，被硬杀时能标出中断的任务 */
+function createStateStore(configPath) {
+  const store = new StateStore({
+    file: path.join(path.dirname(configPath), 'state.json'),
+    onError: (message) => process.stderr.write(`[state] ${message}\n`),
   });
+  store.load();
+  return store;
 }
 
-function resolveEnv(config, env = process.env) {
-  const usedSources = new Set(config.rules.map((rule) => rule.source ?? 'youtrack')); // 与 runCycle 的兜底一致
-  const urls = {};
-  const tokens = {};
-  for (const name of SOURCE_KEYS) {
-    urls[name] = env[sources[name].urlEnv] || sources[name].defaultUrl;
-    if (usedSources.has(name)) {
-      const token = env[sources[name].tokenEnv];
-      if (!token) {
-        throw new Error(`未设置 ${sources[name].tokenEnv} 环境变量`);
-      }
-      tokens[name] = token;
-    }
-  }
-  return { urls, tokens };
-}
-
-async function runCycle({ config, deps, round }) {
-  log(`轮次 ${round} 开始`);
-  const processed = new Set();
-  for (const rule of config.rules) {
-    if (deps.shouldStop?.()) return;
-    const labelDesc = rule.labels.join(',');
-    const sourceName = rule.source ?? 'youtrack'; // loadConfig 已保证存在；兜底缺省兼容直接构造 config 的调用（测试）
-    const source = deps.sources[sourceName];
-    let tasks;
-    try {
-      tasks = await source.fetchTasks(rule, {
-        httpClient: deps.httpClient?.[sourceName], // 按来源取 client：401/400 消息指向对应来源的 tokenEnv；可选链使 mock 传 null 得 undefined、各来源 fetch 默认参数生效
-        url: deps.urls[sourceName],
-        token: deps.tokens[sourceName],
-      });
-    } catch (err) {
-      log(`[${labelDesc}] 抓取失败: ${err.message}`);
-      continue;
-    }
-    const candidates = filterTasks(tasks, rule.labels, rule.notLabels);
-    if (candidates.length === 0) {
-      log(`[${labelDesc}] 无候选任务`);
-      continue;
-    }
-    log(`[${labelDesc}] 抓取到 ${candidates.length} 个候选任务`);
-    for (const task of candidates) {
-      if (deps.shouldStop?.()) return;
-      if (processed.has(task.idReadable)) continue;
-      processed.add(task.idReadable);
-      let prompt;
-      try {
-        prompt = renderTemplateFile(rule.promptTemplate, buildPlaceholders(sourceName, task, rule));
-      } catch (err) {
-        log(`[${task.idReadable}] 模板渲染失败: ${err.message}`);
-        continue;
-      }
-      log(`[${task.idReadable}] 开始执行（模板: ${rule.promptTemplate}）`);
-      let result;
-      try {
-        result = await deps.runAgent(prompt, {
-          agent: config.agent,
-          cwd: deps.cwd,
-          agentConfig: config.agentConfig,
-          onChild: deps.onChild,
-        });
-      } catch (err) {
-        log(`[${task.idReadable}] 执行失败: ${err.message}`);
-        continue;
-      }
-      log(`[${task.idReadable}] 完成（退出码 ${result.exitCode}）`);
-    }
-  }
-  log(`轮次 ${round} 结束，等待 ${config.intervalSeconds} 秒`);
-}
-
+/**
+ * CLI 入口：只跑循环，不起页面。
+ * 页面模式见 src/server.js，两者共用同一个 Worker。
+ */
 async function main(argv = process.argv) {
-  const configPath = path.resolve(argv[2] || 'config.json');
-  let config;
+  const configPath = path.resolve(argv[2] || DEFAULT_CONFIG_PATH);
+
+  let created = false;
   try {
-    config = loadConfig(configPath);
+    created = ensureConfigFile(configPath);
   } catch (err) {
-    console.error(`配置错误: ${err.message}`);
+    console.error(`配置初始化失败: ${err.message}`);
     process.exit(1);
   }
-  let env;
+  if (created) {
+    console.log(`已生成默认配置: ${configPath}`);
+  }
+
+  const worker = new Worker({ configPath, cwd: process.cwd(), stateStore: createStateStore(configPath) });
+
   try {
-    // env 文件只补充不覆盖已有环境变量（显式设置的环境变量优先）
-    env = resolveEnv(config, { ...loadEnv(config.envFile), ...process.env });
+    await worker.start();
   } catch (err) {
-    console.error(`环境错误: ${err.message}`);
+    console.error(`启动失败: ${err.message}`);
     process.exit(1);
   }
-  let running = true;
-  let currentChild = null;
-  let sigintTimer = null;
-  const deps = {
-    // 按来源创建 client：401/400 消息指向对应来源的 token 环境变量（spec 错误处理表：wiki 401 提示检查 SUPERMAP_WIKI_TOKEN）。
-    // 不能用共享单一 client——那会覆盖 wiki.js 默认参数，导致生产路径 wiki 401 误导指向 YOUTRACK_TOKEN
-    httpClient: Object.fromEntries(
-      SOURCE_KEYS.map((name) => [name, createHttpClient(sources[name].tokenEnv)])
-    ),
-    sources,
-    runAgent,
-    urls: env.urls,
-    tokens: env.tokens,
-    cwd: path.resolve(__dirname, '..'),
-    onChild: (child) => { currentChild = child; },
-    shouldStop: () => !running,
+
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    worker.log(`收到 ${signal}，正在停止...`);
+    await worker.stop();
+    worker.log('已退出');
+    process.exit(0);
   };
-  process.on('SIGINT', () => {
-    log('收到 Ctrl+C，正在退出...');
-    running = false;
-    if (currentChild) {
-      currentChild.kill();
-      if (process.platform === 'win32' && currentChild.pid) {
-        spawnSync('taskkill', ['/pid', String(currentChild.pid), '/T', '/F']);
-      }
-    }
-    sigintTimer = setTimeout(() => process.exit(0), 3000);
-    sigintTimer.unref();
-  });
-  let round = 1;
-  while (running) {
-    try {
-      await runCycle({ config, deps, round });
-    } catch (err) {
-      log(`本轮异常: ${err.message}`);
-    }
-    if (!running) break;
-    await sleep(config.intervalSeconds * 1000, () => !running);
-    round += 1;
+
+  process.on('SIGINT', () => { shutdown('Ctrl+C'); });
+  process.on('SIGTERM', () => { shutdown('SIGTERM'); });
+
+  // start() 已经把循环挂在后台，这里等待它自然结束
+  await worker.loopPromise;
+  if (!shuttingDown) {
+    await worker.stop();
+    process.exit(0);
   }
-  clearTimeout(sigintTimer);
-  log('已退出');
-  process.exit(0);
 }
 
-module.exports = { timestamp, log, sleep, runCycle, resolveEnv, main };
+module.exports = { main, ensureConfigFile, createStateStore, DEFAULT_CONFIG_PATH };
 
 if (require.main === module) {
   main();

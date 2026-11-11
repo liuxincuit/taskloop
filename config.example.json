@@ -1,38 +1,36 @@
 {
   "intervalSeconds": 60,
-  "agent": "pi",
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "thinking": "max",
+  "workdir": "~/.taskloop/workdir",
+  "sessionDir": "~/.taskloop/sessions",
   "envFile": "~/.pi/agent/.env",
-  "pi": {
-    "sessionDir": "./.pi-sessions",
-    "thinking": "max",
-    "model": "deepseek-v4-flash"
-  },
   "rules": [
     {
       "source": "youtrack",
       "labels": ["ready"],
-      "notLabels": ["explored"],
+      "notLabels": ["done"],
       "assignee": "me",
-      "promptTemplate": "templates/yt-explorer.md"
+      "promptTemplate": "templates/analyze.md"
     },
     {
       "source": "wiki",
       "labels": ["ready"],
-      "notLabels": ["explored"],
+      "notLabels": ["done"],
       "assignee": "me",
-      "promptTemplate": "templates/wiki-exploer.md"
+      "promptTemplate": "templates/analyze.md"
     },
     {
       "source": "jira",
       "labels": ["taskloop"],
       "notLabels": ["explored"],
       "assignee": "me",
-      "promptTemplate": "templates/analyze.md"
+      "promptTemplate": "templates/example-workflow.md"
     },
     {
       "source": "scrum",
-      "labels": ["foo"],
-      "notLabels": ["bar"],
+      "labels": ["taskloop"],
+      "notLabels": ["explored"],
       "promptTemplate": "templates/scrum-test.md"
     }
   ]

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>taskloop</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="top">
+  <span class="brand">taskloop</span>
+  <nav class="nav">
+    <button class="nav-btn is-active" data-view="progress" type="button">进度</button>
+    <button class="nav-btn" data-view="config" type="button">配置</button>
+  </nav>
+
+  <span class="top__spacer"></span>
+
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span class="status__text" id="statusText">连接中</span>
+    <span class="countdown" id="countdown"></span>
+  </div>
+
+  <div class="controls" id="controls"></div>
+</header>
+
+<div class="banner" id="banner" hidden></div>
+
+<!-- ======================= 进度 ======================= -->
+<main class="view" id="view-progress">
+  <aside class="rules" id="rulesPane">
+    <div class="rules__head" id="rulesHead">规则</div>
+  </aside>
+
+  <section class="stream" id="stream">
+    <div class="idle" id="idle"></div>
+  </section>
+</main>
+
+<!-- ======================= 配置 ======================= -->
+<main class="view" id="view-config" hidden>
+  <section class="cfg">
+    <div class="cfg__wrap">
+      <div id="cfgBody">
+        <p class="cfg__note">正在读取配置…</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
