@@ -16,9 +16,9 @@
 ## 3. 循环与生命周期
 
 - [ ] 3.1 抽出 `src/worker.js`，暴露 `start()` / `stop()` / `wake()` / `snapshot()`，把原 `main()` 里的 `while` 循环、`sleep` 与轮次计数迁入；`src/main.js` 缩为纯 CLI 入口；验证方式：新增 `test/worker.test.js` 覆盖启动后按间隔重复、停止后不再开始新轮次、`wake()` 提前唤醒三条路径并通过
-- [ ] 3.2 停止语义改为协作式中止：中止当前任务、对外报告"停止中"中间态、中止的任务记为"已中止"；验证方式：`test/worker.test.js` 覆盖"有任务在跑时停止"和"仅在等待时停止"两种情况，断言前者产生已中止记录并经过停止中状态
+- [ ] 3.2 停止语义改为协作式中止：中止当前任务、对外报告"停止中"中间态、中止的任务记为"已中止"，并移除 `src/main.js` 中 SIGINT handler 里的 `spawnSync` + `taskkill` 进程树清理（agent 已不再是子进程，没有进程树可杀）；验证方式：`test/worker.test.js` 覆盖"有任务在跑时停止"和"仅在等待时停止"两种情况，断言前者产生已中止记录并经过停止中状态
 - [ ] 3.3 迁移 `test/main.test.js` 中针对 `runCycle` 的用例到 `test/worker.test.js`，验证方式：单轮内同任务只执行一次、单规则抓取失败继续、模板渲染失败跳过、`config.model` 与 `config.thinking` 透传给执行层四类用例全部通过
-- [ ] 3.4 删除 `src/agentRunner.js`、`src/piRunner.js`、`src/claudeRunner.js`、`src/args.js`、`src/agents.js` 及对应的四个测试文件；验证方式：`npm test` 全绿且 `grep -r "child_process" src/` 无任何匹配
+- [ ] 3.4 删除 `src/agentRunner.js`、`src/piRunner.js`、`src/claudeRunner.js`、`src/args.js`、`src/agents.js` 及对应的四个测试文件；验证方式：`npm test` 全绿，且 `grep -rn "child_process" src/` 无任何匹配（`main.js` 的 `spawnSync` 已在 3.2 移除，剩下的 HTTP 抓取走 `node:http`）
 
 ## 4. 状态持久化
 
@@ -36,16 +36,18 @@
 
 ## 6. 页面
 
-- [ ] 6.1 按 `docs/prototype/index.html` 落地进度视图：轮次/规则/任务三层结构、左侧层级竖线、三种文本视觉层次、空闲态显示上一次运行结果；验证方式：浏览器打开后启动循环，能看到任务从排队到执行中到完成的完整流转
+- [ ] 6.1 把 `docs/prototype/index.html` 落地为 `src/ui/` 下的进度视图：轮次/规则/任务三层结构、左侧层级竖线、三种文本视觉层次、空闲态显示上一次运行结果；验证方式：浏览器打开后启动循环，能看到任务从排队到执行中到完成的完整流转
 - [ ] 6.2 实现配置表单：运行参数区与规则卡片增删，来源与模板为下拉选择、标签为可增删的条目；验证方式：浏览器中增删规则并保存后重新打开页面，改动生效，且手写的相对路径与未知字段未被改写
 - [ ] 6.3 实现停止二次确认与"停止中"中间态；验证方式：浏览器中点击停止出现确认、取消后状态不变、确认后显示停止中再变为已停止，三个分支各验一次
-- [ ] 6.4 校验页面自包含与响应式；验证方式：`grep -E 'https?://' docs/` 无任何外部资源引用，并在 560px 宽度下截图确认顶栏控制项可见、正文正常换行
+- [ ] 6.4 校验页面自包含与响应式；验证方式：对 `src/ui/` 下每个文件执行 `grep -E 'https?://'` 均无匹配（`MUST NOT` 扫描 `docs/`——那里有历史设计文档本就带外部链接，会误报），并在 560px 宽度下截图确认顶栏控制项可见、正文正常换行
 
 ## 7. 集成与交付
 
 - [ ] 7.1 端到端验证：用 mock 任务来源与 mock 模型会话跑完整一轮，验证方式：页面能看到规则抓取数、任务执行层级、工具调用与文本流，且 `npm test` 全绿
 - [ ] 7.2 扩展兼容性验证：在装有终端类扩展（会操作 TUI 的扩展）的环境里以页面模式启动并执行一个任务，验证方式：进程不崩溃，若扩展报错则确认在 `DefaultResourceLoader` 中用扩展过滤排除并记录在 README
 - [ ] 7.3 升版本号 `0.4.2` → `1.0.0`，补齐 README 的运行目录约定、依赖说明与配置迁移指引；验证方式：`npm test` 全绿，`package.json` 版本正确，README 的迁移章节能指导一份旧的带 `agent` 字段配置改写成新结构
+- [ ] 7.4 为 `package.json` 添加 `bin` 入口（指向页面模式入口）并移除 `private: true`；验证方式：`npm pack --dry-run` 的产物列表包含该入口文件，且 `package.json` 中不再有 `private` 字段
+- [ ] 7.5 删除 README 的「扩展新 Agent」整节——它引用 `src/args.js`、`src/agents.js`、`src/agentRunner.js`，这些文件已在 3.4 删除；验证方式：`grep -nE "src/agents\.js|src/args\.js|src/piRunner\.js|src/claudeRunner\.js" README.md` 无匹配
 
 ## Workflow follow-up
 
