@@ -1,15 +1,15 @@
 # taskloop
 
-定时从多个任务来源按标签抓取任务，交给 AI Agent（pi / claude）非交互模式自动执行处理的循环 Worker。
+定时从多个任务来源按标签抓取任务，交给 AI Agent（基于 pi SDK，在进程内运行）自动执行处理的循环 Worker，带 Web 控制台。
 
-零第三方依赖（仅 Node.js 内置模块），Node.js ≥ 18（需要 `String.prototype.replaceAll`）。
+依赖 `@earendil-works/pi-coding-agent`（pi SDK），Node.js ≥ 18。不需要在 PATH 里安装 `pi` 或 `claude`。
 
 ## 工作原理
 
 1. 按固定间隔（`intervalSeconds`）循环执行每一轮
 2. 每轮遍历 `config.json` 中的每条规则，从规则指定的来源（`source`）按标签抓取候选任务
 3. 本地过滤：任务必须包含全部 `labels`，且不包含任何 `notLabels`
-4. 对每个候选任务渲染 prompt 模板（模板可引用任务占位符），调用所选 agent（`config.json` 顶层 `agent` 字段，缺省 pi）非交互执行
+4. 对每个候选任务渲染 prompt 模板（模板可引用任务占位符），在当前进程内创建 pi 会话执行
 5. 同一轮内相同任务只执行一次；抓取失败、模板读取失败均记日志并继续，不中断整轮
 
 ## 支持的来源
@@ -51,7 +51,9 @@
 ### 1. 环境要求
 
 - Node.js ≥ 18
-- 所用 agent 的命令在 PATH 中可用：`pi`（缺省）或 `claude`
+- 模型凭据：由 `envFile` 指向的 `KEY=VALUE` 文件提供，或使用 pi 已保存的凭据（`~/.pi/agent/auth.json`）
+
+不需要在 PATH 中存在 `pi` / `claude` 命令行——SDK 直接在当前进程内运行。
 
 ### 2. 配置环境变量
 
@@ -76,24 +78,42 @@ token 也可以不放进环境变量，而是在 `config.json` 顶层通过 `env
 
 路径支持 `~` 展开为 home 目录，其余相对 `config.json` 所在目录解析。env 文件的值只补充不覆盖已有环境变量（显式设置的环境变量优先）；显式配置了 `envFile` 但文件不存在时启动报错退出（`环境错误: 无法读取 env 文件 ...`），未配置 `envFile` 时行为与直接设置环境变量一致。
 
-### 3. 创建本地配置
+### 3. 初始化配置
 
-复制示例配置为 `config.json`（已被 .gitignore 忽略，不会提交）：
+不带参数启动时会自动在 `~/.taskloop/config.json` 生成一份可直接运行的默认配置（同时复制一份模板到 `~/.taskloop/templates/analyze.md`）。
 
-```bash
-cp config.example.json config.json
-```
-
-然后按需修改 `config.json`。完整字段说明见下文「配置详解」。
+要基于示例手写配置，复制 `config.example.json` 到 `~/.taskloop/config.json` 后按需修改。完整字段说明见下文「配置详解」。
 
 ### 4. 运行
 
+两种入口共用同一套循环实现：
+
 ```bash
-node src/main.js                 # 使用默认 config.json
-node src/main.js /path/to/my-config.json
+node src/server.js               # 页面模式（推荐）：默认 http://127.0.0.1:4789/
+node src/main.js                 # 纯命令行模式，只跑循环不开页面
+node src/main.js /path/to/my-config.json   # 指定其他配置文件
 ```
 
-Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程（Windows 下强制结束进程树）。
+页面模式启动后循环处于**停止**状态，在页面上点「启动」才开始轮询；命令行模式启动即开始轮询。
+
+页面服务只监听 `127.0.0.1`，不会暴露给局域网。端口默认 4789，可用环境变量 `TASKLOOP_PORT` 覆盖。
+
+Ctrl+C 会优雅退出：不再开始新轮次，并中止正在执行的任务（协作式中止，不是杀进程）。
+
+### 运行目录
+
+所有状态集中在 `~/.taskloop/`：
+
+| 路径 | 内容 |
+| --- | --- |
+| `config.json` | 配置（默认位置） |
+| `state.json` | 循环状态、任务历史、日志环形缓冲 |
+| `logs/` | 预留的日志目录 |
+| `sessions/` | agent 会话文件（完整对话在这里，状态文件只存路径） |
+| `workdir/` | agent 执行命令、读写文件的默认工作目录 |
+| `templates/` | 首次启动时复制的默认模板 |
+
+重启后页面会恢复历史记录；进程被硬杀时正在执行的任务会被标为「已中断」。
 
 ## 配置详解
 
@@ -102,52 +122,36 @@ Ctrl+C 会优雅退出：停止新轮次、终止正在执行的 agent 子进程
 | 字段 | 必需 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | `intervalSeconds` | 否 | `60` | 轮询间隔（正整数，秒） |
-| `agent` | 否 | `pi` | 执行 agent 的注册表 key，目前 `pi` / `claude`；非法值启动报错并列出合法值 |
+| `model` | 否 | — | 模型，写法为 `provider/modelId` 或只写 `modelId`；留空使用 pi 设置中的默认模型。多个提供方存在同名模型时必须写全 `provider/modelId`，否则启动报错 |
+| `thinking` | 否 | — | 推理强度：`off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`；留空使用 pi 设置中的默认值 |
+| `workdir` | 否 | `~/.taskloop/workdir` | agent 执行命令、读写文件的工作目录；`~` 展开，其余相对 config 文件目录解析；不存在时自动创建 |
+| `sessionDir` | 否 | `~/.taskloop/sessions` | agent 会话文件目录；不存在时自动创建 |
 | `envFile` | 否 | — | 环境变量文件路径（`KEY=VALUE` 格式），`~` 展开为 home 目录，其余相对 config 文件目录解析；仅补充不覆盖已有环境变量；文件不存在启动报错 |
 | `rules` | 是 | — | 规则数组，非空 |
 
-### agent 专属配置块
-
-顶层 `{agent}` 命名的对象（如 `pi`、`claude`）存放该 agent 的调用参数。除保留字段外，任意字段经约定映射生成 CLI 参数：
-
-| 配置值类型 | 生成的 CLI 参数 |
-| --- | --- |
-| 字符串/数字 `"key": "v"` | `--key v`（camelCase 自动转 kebab-case，如 `permissionMode` → `--permission-mode`） |
-| `true` | `--key`（纯 flag） |
-| `false` / `null` | 跳过不传 |
-| 数组 | 启动报错，改用 `args` |
-
-保留/特殊字段：
-
-| 字段 | 说明 |
-| --- | --- |
-| `path` | 可执行文件命令名或完整路径，缺省为 agent 名（`"pi"`/`"claude"`），不参与映射 |
-| `args` | 字符串数组，原样拼接在所有参数之后（表达重复 flag 等映射覆盖不了的场景） |
-| 路径类 key | 注册表 `pathKeys` 声明的 key（如 pi 的 `sessionDir`），值相对 config 文件所在目录解析为绝对路径后，作为普通映射参数生成 |
-
-> 注意：路径类 key（如 pi 的 `sessionDir`）例外——值必须是非空字符串，设为 `null` 等非字符串会在启动时报错，而不是跳过。
-
-固定结构性参数：`-p @tmpfile`（pi）/ `-p` + stdin（claude）是 prompt 传递机制，代码固定、不可配置。参数顺序：结构性参数 → 映射参数（config 书写顺序）→ `args`。
+配置默认位于 `~/.taskloop/config.json`，不带参数启动时读取该路径；也支持 `node src/main.js /path/to/config.json` 指定其他文件。
 
 ```json
 {
-  "agent": "pi",
-  "pi": { "sessionDir": "./.pi-sessions", "thinking": "max", "model": "deepseek-v4-flash" }
+  "intervalSeconds": 60,
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "thinking": "max",
+  "workdir": "~/.taskloop/workdir",
+  "sessionDir": "~/.taskloop/sessions",
+  "envFile": "~/.pi/agent/.env",
+  "rules": [
+    {
+      "source": "youtrack",
+      "labels": ["ready"],
+      "notLabels": ["done"],
+      "assignee": "me",
+      "promptTemplate": "templates/analyze.md"
+    }
+  ]
 }
 ```
 
-生成命令行：`pi -p @<tmpfile> --session-dir <绝对路径> --thinking max --model deepseek-v4-flash`。
-
-claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显式配置：
-
-```json
-{
-  "agent": "claude",
-  "claude": { "permissionMode": "bypassPermissions" }
-}
-```
-
-切换 agent 只需改 `agent` 字段并重写对应配置块。
+> 旧版本的 `agent` 字段与 `pi` / `claude` 配置块已移除：现在固定使用 pi SDK，不再调用外部命令行。出现这些字段时启动会报错并提示改法——把 `model` 与 `thinking` 移到配置顶层。
 
 ### 规则字段（`rules[]`）
 
@@ -194,6 +198,53 @@ claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显�
 - 用法示例见 `templates/example-workflow.md`；片段文件建议放在 `templates/parts/` 下
 
 > 注意：`templates/*` 已被 .gitignore 忽略，新增片段目录/文件需在 .gitignore 中取消忽略（如 `!templates/parts/`）。
+
+## 从 0.4.x 迁移
+
+1.0.0 是破坏性变更：执行层从「调用外部命令行」换成「进程内 pi SDK」，配置结构随之拍平。旧配置不会再被接受，启动时会报错并指向这一节。
+
+| 旧结构 | 新结构 |
+| --- | --- |
+| `"agent": "pi"`| 删除（固定使用 pi SDK） |
+| `"pi": { "thinking": "max", "model": "x" }` | 提升到顶层 `"thinking": "max"`、`"model": "x"` |
+| `"pi": { "sessionDir": "./.pi-sessions" }` | 提升到顶层 `"sessionDir"` |
+| `"pi": { "path": ... }`、`"args": [...]` | 删除（不再调用命令行） |
+| （无） | 新增 `"workdir"`：agent 执行命令的工作目录 |
+
+改写示例：
+
+```json
+{
+  "intervalSeconds": 60,
+  "agent": "pi",
+  "pi": { "sessionDir": "./.pi-sessions", "thinking": "max", "model": "deepseek-v4-flash" },
+  "rules": [
+    { "source": "youtrack", "labels": ["ready"], "promptTemplate": "templates/analyze.md" }
+  ]
+}
+```
+
+改成：
+
+```json
+{
+  "intervalSeconds": 60,
+  "thinking": "max",
+  "model": "deepseek-v4-flash",
+  "sessionDir": "~/.taskloop/sessions",
+  "workdir": "~/.taskloop/workdir",
+  "rules": [
+    { "source": "youtrack", "labels": ["ready"], "promptTemplate": "templates/analyze.md" }
+  ]
+}
+```
+
+其他变化：
+
+- 配置默认位置从「当前目录的 `config.json`」改为 `~/.taskloop/config.json`（仍可用命令行参数指定其他路径）
+- 模型凭据不再依赖「pi 已登录」：可以用 `envFile` 提供，也可以继续用 `~/.pi/agent/auth.json` 里已保存的凭据
+- `pi` 不再需要在 PATH 中；`claude` 后端已删除，需要换模型时改 `model` 字段
+- 页面能编辑配置，但表单保存后需要重启循环才生效
 
 ## 扩展新来源
 
@@ -269,72 +320,44 @@ claude 不再自动附带 `--permission-mode bypassPermissions`，需要时显�
 
    注册后自动获得：`config` 的 `source` 校验、`main` 的按来源分发、`resolveEnv` 的按需 token 校验、按来源的 HTTP client（错误消息指向对应 token 环境变量）、任务级占位符（`placeholders` 字段，模板渲染时按来源替换）。
 
-## 扩展新 Agent
-
-与「扩展新来源」同理，新增 agent 只需两步，校验与分发自动生效，无需改动其他代码：
-
-1. **创建 `src/<name>.js`**，导出与现有适配器同签名的纯函数：
-
-   ```js
-   // src/myagent.js
-   const { buildMappedArgs } = require('./args.js');
-
-   function buildMyagentArgs(prompt, { tmpFile, cwd, agentConfig }) {
-     const cmd = agentConfig?.path ?? 'myagent';
-     const args = ['-p', '@' + tmpFile, ...buildMappedArgs(agentConfig)];
-     if (Array.isArray(agentConfig?.args)) args.push(...agentConfig.args);
-     return { cmd, args };
-   }
-
-   module.exports = { buildMyagentArgs };
-   ```
-
-   适配器只负责「prompt → spawn 参数」的映射，纯函数、不 spawn、不碰文件系统；临时文件写入、退出码、Ctrl+C 杀进程、win32 引号处理均由通用执行层（`src/agentRunner.js`）统一负责。
-
-   返回值为 `{ cmd, args }`；若该 CLI 的 prompt 经 stdin 读取（如 claude），返回 `{ cmd, args, stdin: true }`——通用层会把 prompt 写入子进程 stdin（win32 下比内联 argv 更稳，避免 prompt 被 shell 引号拆坏）。
-
-2. **在 `src/agents.js` 注册一行**，声明路径类 key（值由 config 相对 config 文件目录解析为绝对路径，如 pi 的 `sessionDir`）：
-
-   ```js
-   const agents = {
-     pi: { buildArgs: buildPiArgs, pathKeys: ['sessionDir'] },
-     claude: { buildArgs: buildClaudeArgs, pathKeys: [] },
-     myagent: { buildArgs: buildMyagentArgs, pathKeys: [] },
-   };
-   ```
-
-   注册后自动获得：`config` 的 `agent` 校验（错误消息列出合法值）、`{agent}` 配置块校验（任意字段经约定映射生成 CLI 参数，见「agent 专属配置块」）、`main` 按 agent 分发、通用执行层。config 用法：
-
-   ```json
-   { "agent": "myagent", "myagent": { "path": "myagent", "model": "x" } }
-   ```
-
 ## 测试
 
 ```bash
 npm test
 ```
 
-测试使用 `node:test`，HTTP 依赖通过注入的 mock `httpClient` 模拟，不访问真实服务。
+测试使用 `node:test`。HTTP 依赖通过注入的 mock `httpClient` 模拟，SDK 会话通过注入的 `createSession` 替身模拟，不访问真实服务、不调用真实模型。
 
 ## 目录结构
 
 ```
 src/
-  main.js         # 主循环、按来源分发、resolveEnv、信号处理
+  main.js         # 纯命令行入口（只跑循环，不开页面）
+  server.js       # 页面模式入口（HTTP 服务 + 静态资源 + SSE）
+  routes.js       # 接口路由（状态快照 / 事件流 / 启停 / 配置读写）
+  worker.js       # 轮询循环与生命周期（start / stop / wake / snapshot）
+  sessionRunner.js# pi SDK 执行层（会话创建、事件采集、中止、结果判定）
+  state.js        # 运行状态与任务历史落盘
   sources.js      # 来源注册表（新增来源只改这里）
-  config.js       # 配置加载与校验
+  config.js       # 配置读取、校验与路径解析
   filter.js       # 本地标签过滤（AND labels / NOT notLabels）
   template.js     # prompt 模板渲染（占位符替换）
+  env.js          # env 文件解析
   youTrack.js     # YouTrack 抓取 + 通用 httpClient
   wiki.js         # Wiki 抓取（buildCql + fetchWikiTasks）
   jira.js         # Jira 抓取（buildJql + fetchTasks）
   scrum.js        # Scrum 抓取（复用 jira.js 的 JQL 与映射）
-  agents.js       # Agent 注册表（新增 agent 只改这里）
-  agentRunner.js  # 通用执行层（临时文件、spawn、退出码、win32 引号）
-  piRunner.js     # pi 适配器（纯函数，prompt → spawn 参数映射）
-  claudeRunner.js # claude 适配器（纯函数，prompt 经 stdin 传入）
+  ui/             # 页面（index.html + style.css + app.js，无构建、无外部资源）
 test/             # node:test 测试
+docs/prototype/   # 设计原型与截图
 templates/        # prompt 模板示例
 templates/parts/ # 模板公共片段（include 复用）
 ```
+
+### 层次约束
+
+新增任务来源时只改 `src/sources.js`（详见「扩展新来源」）：
+
+- `worker.js` 不感知具体来源，`rule.source` 的所有处理都经注册表分发
+- 页面表单的来源下拉从 `GET /api/config` 的 `options.sources` 读取，新增来源后自动出现在页面上
+- 来源的 `tokenEnv` / `urlEnv` / `defaultUrl` 也由注册表提供，启动时的 token 校验同样自动生效
